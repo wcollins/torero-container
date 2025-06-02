@@ -1,4 +1,4 @@
-# >_ torero container
+# 📦 torero container
 Container image for [torero](https://torero.dev), built using vendor-neutral Containerfile specifications and packaged in a _ready-to-use_ container with optional [OpenTofu](https://opentofu.org) installation. The image is hosted on GitHub Container Registry (GHCR). For more details about _torero_, visit the [official docs](https://docs.torero.dev/en/latest/).
 
 > [!NOTE]
