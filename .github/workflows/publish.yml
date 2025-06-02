@@ -1,0 +1,168 @@
+---
+name: Build and Publish Docker Image
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: 
+      - main
+  workflow_dispatch:
+    inputs:
+      torero_version:
+        description: 'torero version to build'
+        required: true
+        default: '1.4.0'
+      python_version:
+        description: 'Python version to install'
+        required: true
+        default: '3.13.0'
+      opentofu_version:
+        description: 'OpenTofu version to test'
+        required: false
+        default: '1.9.1'
+
+  # rebuild weekly to keep things secure and up-to-date
+  schedule:
+    - cron: '0 2 * * 0'  # weekly on sundays at 2am
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: torerodev/torero-container
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Determine versions
+        id: versions
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "torero_version=${{ github.event.inputs.torero_version }}" >> $GITHUB_OUTPUT
+            echo "python_version=${{ github.event.inputs.python_version }}" >> $GITHUB_OUTPUT
+            echo "opentofu_version=${{ github.event.inputs.opentofu_version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            # Extract version from release tag (remove 'v' prefix if present)
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "torero_version=$VERSION" >> $GITHUB_OUTPUT
+            echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for releases
+            echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for releases
+          else
+            echo "torero_version=1.3.1" >> $GITHUB_OUTPUT
+            echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for other builds
+            echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for other builds
+          fi
+      
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+      
+      - name: Set image tags
+        id: meta
+        run: |
+          # For pull requests, use a test tag
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "image_tags=local-test:pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            # For releases and workflow dispatch
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
+            
+            # If it's a release or workflow dispatch, also tag as latest
+            if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            fi
+            
+            echo "image_tags=$TAGS" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build and tag Docker image
+        id: docker_build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Containerfile
+
+          # don't push for PRs, only push for releases or manual workflow
+          push: ${{ github.event_name != 'pull_request' }}
+
+          # load into Docker daemon for PR builds so tests can run
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.image_tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/torerodev/docker-torero
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            TORERO_VERSION=${{ steps.versions.outputs.torero_version }}
+            PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Run basic tests
+        run: |
+          # For PRs, use the local image
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TEST_IMAGE="local-test:pr-${{ github.event.pull_request.number }}"
+          else
+            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
+          fi
+          
+          # Test Torero
+          docker run --rm $TEST_IMAGE torero version
+          
+          # test python installation
+          docker run --rm $TEST_IMAGE python3 --version
+      
+      - name: Test OpenTofu installation
+        run: |
+          # For PRs, use the local image
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TEST_IMAGE="local-test:pr-${{ github.event.pull_request.number }}"
+          else
+            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
+          fi
+          
+          # Test OpenTofu installation
+          docker run --rm \
+            -e INSTALL_OPENTOFU=true \
+            -e OPENTOFU_VERSION=${{ steps.versions.outputs.opentofu_version }} \
+            $TEST_IMAGE \
+            bash -c "tofu version || exit 0"
+      
+      - name: Run vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ github.event_name == 'pull_request' && format('local-test:pr-{0}', github.event.pull_request.number) || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.versions.outputs.torero_version) }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Upload vulnerability report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+        # only run this step with proper permissions
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+...
