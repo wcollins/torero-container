@@ -4,8 +4,9 @@ Container image for [torero](https://torero.dev), built using vendor-neutral Con
 > [!NOTE]
 > For questions or _real-time_ feedback, you can connect with us directly in the [Network Automation Forum (NAF) Slack Workspace](https://networkautomationfrm.slack.com/?redir=%2Farchives%2FC075L2LR3HU%3Fname%3DC075L2LR3HU) in the **#tools-torero** channel.
 
-## Features
+## ✨ Features
 - Built with vendor-neutral Containerfile for maximum compatibility
+- Multi-architecture support _(AMD64 and ARM64)_
 - Based on [debian-slim](https://github.com/lxc/lxc-ci/tree/main/images/debian) for minimal footprint
 - Hosted on GitHub Container Registry (GHCR) for reliable distribution
 - Includes _torero_ installed and ready to go
@@ -99,6 +100,18 @@ The _cli-runner.sh_ script provides a convenient way to run, test, and do house 
 
 ## Container Architecture
 This project uses vendor-neutral Containerfile specifications for maximum compatibility across container runtimes. The image is built and distributed through GitHub Container Registry (GHCR) for reliable access and version management.
+
+### Multi-Architecture Support
+The container images support both AMD64 and ARM64 architectures. The appropriate architecture will be selected automatically based on your host system when pulling the image.
+
+For building multi-architecture images locally:
+```bash
+# build for multiple platforms
+make build-multi PLATFORMS=linux/amd64,linux/arm64
+
+# build for local platform only
+make build
+```
 
 ## Software Licenses
 This project incorporates the following software with their respective licenses:

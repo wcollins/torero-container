@@ -119,16 +119,31 @@ configure_locale() {
 }
 
 install_torero() {
-    local torero_url="https://download.torero.dev/torero-v${TORERO_VERSION}-linux-amd64.tar.gz"
+
+    # detect architecture
+    local arch=""
+    case "$(uname -m)" in
+        x86_64|amd64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            echo "unsupported architecture: $(uname -m)" >&2
+            exit 1
+            ;;
+    esac
+    
+    local torero_url="https://download.torero.dev/torero-v${TORERO_VERSION}-linux-${arch}.tar.gz"
     local torero_tar="/tmp/torero.tar.gz"
 
-    echo "installing torero version ${TORERO_VERSION}..."
+    echo "installing torero version ${TORERO_VERSION} for ${arch} architecture..."
     curl -L "$torero_url" -o "$torero_tar" || { echo "failed to download torero" >&2; exit 1; }
     tar -xzf "$torero_tar" -C /tmp || { echo "failed to extract torero" >&2; exit 1; }
     
     mv /tmp/torero /usr/local/bin/torero || { echo "failed to move torero" >&2; exit 1; }
     chmod +x /usr/local/bin/torero || { echo "failed to set torero permissions" >&2; exit 1; }
-    
     
     # clean up
     rm -f "$torero_tar"
@@ -198,6 +213,7 @@ create_manifest() {
     cat > /etc/torero-image-manifest.json << EOF
 {
   "build_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "architecture": "$(uname -m)",
   "tools": {
     "torero": "${TORERO_VERSION}",
     "python": "$(python3 --version 2>&1)"

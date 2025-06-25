@@ -39,12 +39,19 @@ TAG_AS_LATEST ?= true
 # force rebuild (no-cache)
 FORCE_REBUILD ?= false
 
+# target platform(s) for multi-arch builds
+PLATFORMS ?= linux/amd64,linux/arm64
+
+# build single platform for local testing
+LOCAL_PLATFORM ?= linux/$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+
 # all available torero versions for build-all
 TORERO_VERSIONS ?= 1.4.0
 
 help:
 	@echo "available targets:"
-	@echo "  build       - build torero image with specified version"
+	@echo "  build       - build torero image for local platform"
+	@echo "  build-multi - build torero image for multiple platforms"
 	@echo "  build-all   - build all torero versions"
 	@echo "  push        - push specific torero version to GHCR"
 	@echo "  push-all    - push all torero versions to GHCR"
@@ -58,23 +65,28 @@ help:
 	@echo "  TORERO_VERSIONS   - space-separated list of torero versions for build-all (default: 1.3.1)"
 	@echo "  FORCE_REBUILD     - set to 'true' to force rebuild (default: false)"
 	@echo "  TAG_AS_LATEST     - set to 'true' to tag latest version (default: true)"
+	@echo "  PLATFORMS         - comma-separated list of target platforms (default: linux/amd64,linux/arm64)"
+	@echo "  LOCAL_PLATFORM    - platform for local builds (default: auto-detected)"
 	@echo ""
 	@echo "examples:"
 	@echo "  make build"
 	@echo "  make build TORERO_VERSION=1.4.0 PYTHON_VERSION=3.13.0"
+	@echo "  make build-multi PLATFORMS=linux/amd64,linux/arm64"
 	@echo "  make build-all TORERO_VERSIONS=\"1.3.1 1.4.0\""
 	@echo "  make push"
 	@echo "  make push-all"
 
 build:
-	@echo "building image: $(GHCR_REGISTRY)/torero:$(TORERO_VERSION)"
+	@echo "building image for local platform: $(GHCR_REGISTRY)/torero:$(TORERO_VERSION)"
 	@if [ "$(FORCE_REBUILD)" = "true" ]; then \
 		docker build -f Containerfile -t $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) \
+			--platform $(LOCAL_PLATFORM) \
 			--build-arg TORERO_VERSION=$(TORERO_VERSION) \
 			--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
 			--no-cache .; \
 	else \
 		docker build -f Containerfile -t $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) \
+			--platform $(LOCAL_PLATFORM) \
 			--build-arg TORERO_VERSION=$(TORERO_VERSION) \
 			--build-arg PYTHON_VERSION=$(PYTHON_VERSION) .; \
 	fi
@@ -82,6 +94,40 @@ build:
 		[ "$(TORERO_VERSION)" = "$(shell echo $(TORERO_VERSIONS) | tr ' ' '\n' | sort -V | tail -n1)" ]; then \
 		echo "tagging $(TORERO_VERSION) as latest"; \
 		docker tag $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) $(GHCR_REGISTRY)/torero:latest; \
+	fi
+
+# build multi-arch images with buildx
+# optionally set PUSH=false to build without pushing (for testing)
+PUSH ?= true
+
+build-multi:
+	@echo "building multi-arch image: $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) for platforms: $(PLATFORMS)"
+	@docker buildx inspect multiarch-builder > /dev/null 2>&1 || docker buildx create --name multiarch-builder --use
+	@if [ "$(FORCE_REBUILD)" = "true" ]; then \
+		docker buildx build -f Containerfile \
+			--platform $(PLATFORMS) \
+			--tag $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) \
+			--build-arg TORERO_VERSION=$(TORERO_VERSION) \
+			--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
+			--no-cache \
+			$(if $(filter true,$(PUSH)),--push,) .; \
+	else \
+		docker buildx build -f Containerfile \
+			--platform $(PLATFORMS) \
+			--tag $(GHCR_REGISTRY)/torero:$(TORERO_VERSION) \
+			--build-arg TORERO_VERSION=$(TORERO_VERSION) \
+			--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
+			$(if $(filter true,$(PUSH)),--push,) .; \
+	fi
+	@if [ "$(TAG_AS_LATEST)" = "true" ] && \
+		[ "$(TORERO_VERSION)" = "$(shell echo $(TORERO_VERSIONS) | tr ' ' '\n' | sort -V | tail -n1)" ]; then \
+		echo "also tagging $(TORERO_VERSION) as latest"; \
+		docker buildx build -f Containerfile \
+			--platform $(PLATFORMS) \
+			--tag $(GHCR_REGISTRY)/torero:latest \
+			--build-arg TORERO_VERSION=$(TORERO_VERSION) \
+			--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
+			$(if $(filter true,$(PUSH)),--push,) .; \
 	fi
 
 # build all torero versions
