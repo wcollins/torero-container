@@ -34,7 +34,21 @@ install_opentofu() {
         echo "installing opentofu version ${OPENTOFU_VERSION}..."
     fi
 
-    local arch="amd64"
+    # detect architecture
+    local arch=""
+    case "$(uname -m)" in
+        x86_64|amd64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            echo "warning: unsupported architecture $(uname -m) for opentofu" >&2
+            return 1
+            ;;
+    esac
+    
     local os="linux"
     local opentofu_url="https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_${os}_${arch}.zip"
     local opentofu_zip="/tmp/opentofu.zip"
@@ -77,7 +91,7 @@ install_opentofu() {
         fi
     fi
 
-    echo "opentofu ${OPENTOFU_VERSION} installation complete"
+    echo "opentofu ${OPENTOFU_VERSION} installation complete for ${arch} architecture"
     return 0
 }
 
