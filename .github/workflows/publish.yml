@@ -42,8 +42,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
       
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -107,7 +114,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
 
           # load into Docker daemon for PR builds so tests can run
-          load: ${{ github.event_name == 'pull_request' }}
+          # note: load is not compatible with multi-platform builds
+          load: false
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.image_tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/torerodev/docker-torero
@@ -121,14 +130,19 @@ jobs:
       
       - name: Run basic tests
         run: |
-          # For PRs, use the local image
+          # For PRs, build a single-platform test image
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            TEST_IMAGE="local-test:pr-${{ github.event.pull_request.number }}"
+            echo "Building single-platform test image for PR validation..."
+            docker build -f Containerfile -t pr-test:${{ github.event.pull_request.number }} \
+              --build-arg TORERO_VERSION=${{ steps.versions.outputs.torero_version }} \
+              --build-arg PYTHON_VERSION=${{ steps.versions.outputs.python_version }} .
+            TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
+            # For releases, the image should be available in the registry
             TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
           fi
           
-          # Test Torero
+          # Test torero
           docker run --rm $TEST_IMAGE torero version
           
           # test python installation
@@ -136,9 +150,9 @@ jobs:
       
       - name: Test OpenTofu installation
         run: |
-          # For PRs, use the local image
+          # For PRs, use the test image we built
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            TEST_IMAGE="local-test:pr-${{ github.event.pull_request.number }}"
+            TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
             TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
           fi
@@ -153,7 +167,7 @@ jobs:
       - name: Run vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ github.event_name == 'pull_request' && format('local-test:pr-{0}', github.event.pull_request.number) || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.versions.outputs.torero_version) }}
+          image-ref: ${{ github.event_name == 'pull_request' && format('pr-test:{0}', github.event.pull_request.number) || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.versions.outputs.torero_version) }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
