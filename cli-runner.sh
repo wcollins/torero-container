@@ -31,6 +31,8 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.13.0}"
 OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.9.1}"
 REPO_DIR="$PWD"
 ENABLE_SSH="false"
+ENABLE_API="false"
+API_PORT="8000"
 
 # fancy colors for output
 GREEN='\033[0;32m'
@@ -56,6 +58,8 @@ usage() {
     echo "  --clean         Remove the container, image, and data directory"
     echo "  --exec CMD      Execute a command in the container"
     echo "  --enable-ssh    Enable SSH access in the container (with --run)"
+    echo "  --enable-api    Enable torero-api in the container (with --run)"
+    echo "  --api-port PORT Set the API port (default: 8000, with --enable-api)"
     echo "  --help          Display this help message"
     echo
     echo -e "${BLUE}Configuration:${NC}"
@@ -65,10 +69,14 @@ usage() {
     echo "  DATA_DIR=${DATA_DIR}"
     echo "  SSH_PORT=${SSH_PORT}"
     echo "  ENABLE_SSH=${ENABLE_SSH}"
+    echo "  ENABLE_API=${ENABLE_API}"
+    echo "  API_PORT=${API_PORT}"
     echo
     echo -e "${BLUE}Examples:${NC}"
     echo "  $0 --build --run                     # Build image and run container"
     echo "  $0 --run --enable-ssh                # Run container with SSH enabled"
+    echo "  $0 --run --enable-api                # Run container with API enabled"
+    echo "  $0 --run --enable-api --api-port 9000 # Run container with API on port 9000"
     echo "  $0 --exec \"torero version\"         # Run torero command in container"
     echo "  $0 --exec \"tofu version\"           # Run OpenTofu command in container"
     echo "  $0 --exec \"python3 --version\"      # Check Python version in container"
@@ -146,6 +154,11 @@ run_container() {
         echo -e "${BLUE}SSH access will be enabled on port ${SSH_PORT}${NC}"
     fi
     
+    if [ "$ENABLE_API" = "true" ]; then
+        PORT_MAPPING="$PORT_MAPPING -p $API_PORT:$API_PORT"
+        echo -e "${BLUE}torero-api will be enabled on port ${API_PORT}${NC}"
+    fi
+    
     docker run -d \
         --name "$CONTAINER_NAME" \
         $PORT_MAPPING \
@@ -153,6 +166,8 @@ run_container() {
         -e INSTALL_OPENTOFU=true \
         -e OPENTOFU_VERSION="$OPENTOFU_VERSION" \
         -e ENABLE_SSH_ADMIN="$ENABLE_SSH" \
+        -e ENABLE_API="$ENABLE_API" \
+        -e API_PORT="$API_PORT" \
         "$IMAGE_NAME"
 
     # check if container started successfully
@@ -183,17 +198,27 @@ display_container_info() {
             echo -e "${BLUE}SSH access:${NC} Disabled (use --enable-ssh to enable)"
         fi
         
+        # check if api is enabled
+        CONTAINER_API=$(docker inspect -f '{{.Config.Env}}' $CONTAINER_NAME | grep -o "ENABLE_API=true")
+        if [ -n "$CONTAINER_API" ]; then
+            # Extract API port from env vars
+            CONTAINER_API_PORT=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' $CONTAINER_NAME | grep "API_PORT=" | cut -d'=' -f2)
+            echo -e "${BLUE}API access:${NC} http://localhost:${CONTAINER_API_PORT:-8000}"
+        else
+            echo -e "${BLUE}API access:${NC} Disabled (use --enable-api to enable)"
+        fi
+        
         echo -e "${BLUE}Data directory:${NC} $DATA_DIR"
         echo -e "${BLUE}Torero version:${NC} $TORERO_VERSION"
         echo -e "${BLUE}Python version:${NC} $PYTHON_VERSION"
         echo -e "${BLUE}OpenTofu version:${NC} $OPENTOFU_VERSION"
         echo -e "${BLUE}Container status:${NC} $(docker inspect -f '{{.State.Status}}' $CONTAINER_NAME)"
         
-        # get IP of container
+        # get ip of container
         local container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_NAME)
         echo -e "${BLUE}Container IP:${NC} $container_ip"
         
-        # Show how to run commands
+        # show how to run commands
         echo -e "${BLUE}Run commands in container:${NC} $0 --exec \"torero version\""
     else
         echo -e "${YELLOW}Container ${CONTAINER_NAME} is not running.${NC}"
@@ -207,7 +232,7 @@ ssh_to_container() {
         return 1
     fi
     
-    # Check if SSH is enabled in the container
+    # check if ssh is enabled in the container
     CONTAINER_SSH=$(docker inspect -f '{{.Config.Env}}' $CONTAINER_NAME | grep -o "ENABLE_SSH_ADMIN=true")
     if [ -z "$CONTAINER_SSH" ]; then
         echo -e "${YELLOW}SSH is not enabled in this container. Restart with --enable-ssh option.${NC}"
@@ -473,6 +498,18 @@ while [[ $# -gt 0 ]]; do
         --enable-ssh)
             ENABLE_SSH="true"
             shift
+            ;;
+        --enable-api)
+            ENABLE_API="true"
+            shift
+            ;;
+        --api-port)
+            if [ $# -lt 2 ]; then
+                echo -e "${RED}Error: --api-port requires a port number${NC}"
+                exit 1
+            fi
+            API_PORT="$2"
+            shift 2
             ;;
         --help)
             usage
