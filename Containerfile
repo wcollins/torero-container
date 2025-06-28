@@ -12,7 +12,7 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # default version
-ARG TORERO_VERSION=1.3.1
+ARG TORERO_VERSION=1.4.0
 ENV TORERO_VERSION=${TORERO_VERSION}
 
 # default opentofu version (can be overridden at runtime)
