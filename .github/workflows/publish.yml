@@ -79,12 +79,16 @@ jobs:
       - name: Determine versions
         id: versions
         run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Release tag: ${{ github.event.release.tag_name || 'N/A' }}"
+          
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "torero_version=${{ github.event.inputs.torero_version }}" >> $GITHUB_OUTPUT
             echo "python_version=${{ github.event.inputs.python_version }}" >> $GITHUB_OUTPUT
             echo "opentofu_version=${{ github.event.inputs.opentofu_version }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "release" ]]; then
             # Use default torero version
+            echo "Using default torero version: ${{ env.DEFAULT_TORERO_VERSION }}"
             echo "torero_version=${{ env.DEFAULT_TORERO_VERSION }}" >> $GITHUB_OUTPUT
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for releases
             echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for releases
@@ -93,6 +97,8 @@ jobs:
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for other builds
             echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for other builds
           fi
+          
+          echo "Final torero_version: $(grep torero_version $GITHUB_OUTPUT | cut -d= -f2)"
       
       - name: Install jq
         run: |
@@ -161,7 +167,8 @@ jobs:
             TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
             # For releases, the image should be available in the registry
-            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
+            # Use the actual container version tag, not torero version
+            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.container_version }}-${{ matrix.build_args }}"
           fi
           
           # test torero
