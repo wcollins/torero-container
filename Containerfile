@@ -1,4 +1,6 @@
-FROM ghcr.io/linuxcontainers/debian-slim:latest
+# Use official Python slim image as base
+ARG PYTHON_VERSION=3.13.0
+FROM python:${PYTHON_VERSION}-slim-bookworm
 
 LABEL maintainer="torerodev <opensource@itential.com>"
 LABEL org.opencontainers.image.source="https://github.com/torerodev/torero-container"
@@ -12,10 +14,6 @@ ENV LC_ALL=en_US.UTF-8
 # default version
 ARG TORERO_VERSION=1.3.1
 ENV TORERO_VERSION=${TORERO_VERSION}
-
-# default python version
-ARG PYTHON_VERSION=3.13.0
-ENV PYTHON_VERSION=${PYTHON_VERSION}
 
 # default opentofu version (can be overridden at runtime)
 ENV OPENTOFU_VERSION=1.9.1
