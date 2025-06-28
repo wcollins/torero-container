@@ -105,7 +105,7 @@ handle_torero_eula() {
     if [ "$auto_accept_eula" = "true" ]; then
         echo "handling torero EULA acceptance (TORERO_APPLICATION_AUTO_ACCEPT_EULA=${auto_accept_eula})..."
         
-        # Create EULA acceptance marker for admin user if it doesn't exist
+        # create eula acceptance marker for admin user if it doesn't exist
         if [ -d "/home/admin" ] && [ ! -f "/home/admin/.torero.d/.license-accepted" ]; then
             mkdir -p /home/admin/.torero.d
             touch /home/admin/.torero.d/.license-accepted
@@ -114,7 +114,7 @@ handle_torero_eula() {
             echo "EULA pre-accepted for admin user"
         fi
         
-        # Try interactive EULA acceptance if expect is available
+        # try interactive EULA acceptance if expect is available
         if command -v expect &> /dev/null; then
             cat > /tmp/accept-eula.exp << 'EOF'
 #!/usr/bin/expect -f
@@ -142,6 +142,68 @@ EOF
         echo "EULA auto-acceptance disabled (TORERO_APPLICATION_AUTO_ACCEPT_EULA=${auto_accept_eula})"
         echo "user will need to manually accept EULA on first run"
     fi
+}
+
+setup_torero_api() {
+    if [[ "${ENABLE_API}" != "true" ]]; then
+        echo "skipping torero-api setup as ENABLE_API is not set to true"
+        return 0
+    fi
+
+    local api_port="${API_PORT:-8000}"
+    echo "setting up torero-api on port ${api_port}..."
+
+    # install uv
+    if ! command -v uv &> /dev/null; then
+        echo "installing uv package manager..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh || {
+            echo "error: failed to install uv" >&2
+            return 1
+        }
+        # add uv to PATH
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    # clone and install torero-api
+    if [ ! -d "/opt/torero-api" ]; then
+        echo "cloning torero-api repository..."
+        git clone https://github.com/torerodev/torero-api.git /opt/torero-api || {
+            echo "error: failed to clone torero-api repository" >&2
+            return 1
+        }
+    fi
+
+    cd /opt/torero-api
+    echo "installing torero-api with uv..."
+    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
+        echo "error: failed to install torero-api" >&2
+        return 1
+    }
+
+    # create log file
+    touch /home/admin/.torero-api.log
+    chown admin:admin /home/admin/.torero-api.log
+
+    # start torero-api daemon
+    echo "starting torero-api daemon on port ${api_port}..."
+    nohup /usr/local/bin/torero-api --daemon --host 0.0.0.0 --port "${api_port}" --log-file /home/admin/.torero-api.log > /dev/null 2>&1 &
+    
+    # success?
+    sleep 2
+    if pgrep -f "torero-api" > /dev/null; then
+        echo "torero-api daemon started successfully on port ${api_port}"
+        
+        # update manifest if available
+        if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
+            jq ".services.torero_api = {\"enabled\": true, \"port\": ${api_port}}" /etc/torero-image-manifest.json > /tmp/manifest.json
+            mv /tmp/manifest.json /etc/torero-image-manifest.json
+        fi
+    else
+        echo "warning: torero-api daemon failed to start" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 # check if ssh access is needed but not configured at build time
@@ -193,4 +255,5 @@ configure_dns
 setup_ssh_runtime
 handle_torero_eula
 install_opentofu || echo "opentofu installation failed, continuing without it"
+setup_torero_api || echo "torero-api setup failed, continuing without it"
 exec "$@"

@@ -1,5 +1,5 @@
 ---
-name: Build and Publish Docker Image
+name: Build and Publish Container Image
 
 on:
   release:
@@ -31,8 +31,29 @@ env:
   IMAGE_NAME: torerodev/torero-container
 
 jobs:
-  build-and-push:
+  # which platform?
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR builds: amd64 only
+            echo 'matrix={"include":[{"platform":"linux/amd64","runner":"ubuntu-latest","build_args":"amd64"}]}' >> $GITHUB_OUTPUT
+          else
+            # Non-PR builds: both platforms
+            echo 'matrix={"include":[{"platform":"linux/amd64","runner":"ubuntu-latest","build_args":"amd64"},{"platform":"linux/arm64","runner":"ubuntu-latest-arm64-4-cores","build_args":"arm64"}]}' >> $GITHUB_OUTPUT
+          fi
+
+  build-and-push:
+    needs: setup
+    strategy:
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -42,15 +63,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: linux/amd64,linux/arm64
-      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-        with:
-          platforms: linux/amd64,linux/arm64
       
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -92,13 +106,9 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "image_tags=local-test:pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           else
-            # For releases and workflow dispatch
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
-            
-            # If it's a release or workflow dispatch, also tag as latest
-            if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-              TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            fi
+            # For releases and workflow dispatch, tag with architecture suffix
+            ARCH_SUFFIX="-${{ matrix.build_args }}"
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}${ARCH_SUFFIX}"
             
             echo "image_tags=$TAGS" >> $GITHUB_OUTPUT
           fi
@@ -114,9 +124,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
 
           # load into Docker daemon for PR builds so tests can run
-          # note: load is not compatible with multi-platform builds
+          # Only build for the current platform
           load: false
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.image_tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/torerodev/docker-torero
@@ -125,12 +135,12 @@ jobs:
           build-args: |
             TORERO_VERSION=${{ steps.versions.outputs.torero_version }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
       
       - name: Run basic tests
         run: |
-          # For PRs, build a single-platform test image
+          # for PRs, build a single-platform test image
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "Building single-platform test image for PR validation..."
             docker build -f Containerfile -t pr-test:${{ github.event.pull_request.number }} \
@@ -142,13 +152,13 @@ jobs:
             TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
           fi
           
-          # Test torero
+          # test torero
           docker run --rm $TEST_IMAGE torero version
           
           # test python installation
           docker run --rm $TEST_IMAGE python3 --version
       
-      - name: Test OpenTofu installation
+      - name: test OpenTofu installation
         run: |
           # For PRs, use the test image we built
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -157,14 +167,14 @@ jobs:
             TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
           fi
           
-          # Test OpenTofu installation
+          # test OpenTofu installation
           docker run --rm \
             -e INSTALL_OPENTOFU=true \
             -e OPENTOFU_VERSION=${{ steps.versions.outputs.opentofu_version }} \
             $TEST_IMAGE \
             bash -c "tofu version || exit 0"
       
-      - name: Run vulnerability scanner
+      - name: run vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ github.event_name == 'pull_request' && format('pr-test:{0}', github.event.pull_request.number) || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.versions.outputs.torero_version) }}
@@ -172,11 +182,60 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
       
-      - name: Upload vulnerability report
+      - name: upload vulnerability report
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
         # only run this step with proper permissions
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+  # combine multi-arch images (only for non-PR builds)
+  combine-images:
+    if: github.event_name != 'pull_request'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Determine versions
+        id: versions
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "torero_version=${{ github.event.inputs.torero_version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            echo "torero_version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "torero_version=1.3.1" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create and push manifest
+        run: |
+          # Create multi-arch manifest
+          docker buildx imagetools create \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-arm64
+          
+          # Also tag as latest for releases
+          if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            docker buildx imagetools create \
+              -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-arm64
+          fi
 ...
