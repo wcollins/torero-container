@@ -49,6 +49,7 @@ install_packages() {
         iproute2 \
         net-tools \
         unzip \
+        file \
         locales \
         vim \
         || { echo "failed to install core packages" >&2; exit 1; }
@@ -128,7 +129,46 @@ install_torero() {
     local torero_tar="/tmp/torero.tar.gz"
 
     echo "installing torero version ${TORERO_VERSION} for ${arch} architecture..."
-    curl -L "$torero_url" -o "$torero_tar" || { echo "failed to download torero" >&2; exit 1; }
+    echo "downloading from: $torero_url"
+    
+    # Download with retry logic
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo "Download attempt $attempt of $max_attempts"
+        
+        if curl -fsSL --connect-timeout 30 --max-time 300 "$torero_url" -o "$torero_tar"; then
+            echo "Download successful"
+            break
+        else
+            echo "Download attempt $attempt failed" >&2
+            if [ $attempt -eq $max_attempts ]; then
+                echo "failed to download torero after $max_attempts attempts" >&2
+                echo "URL: $torero_url" >&2
+                echo "HTTP response:" >&2
+                curl -I "$torero_url" >&2 || true
+                exit 1
+            fi
+            echo "Retrying in 5 seconds..." >&2
+            sleep 5
+            attempt=$((attempt + 1))
+        fi
+    done
+    
+    # is file actually gzipped?
+    if command -v file >/dev/null 2>&1; then
+        if ! file "$torero_tar" | grep -q "gzip compressed"; then
+            echo "Downloaded file is not a gzip archive" >&2
+            echo "File type: $(file "$torero_tar")" >&2
+            echo "First 100 bytes:" >&2
+            head -c 100 "$torero_tar" >&2
+            exit 1
+        fi
+    else
+        echo "Warning: 'file' command not available, skipping file type check"
+    fi
+    
     tar -xzf "$torero_tar" -C /tmp || { echo "failed to extract torero" >&2; exit 1; }
     
     mv /tmp/torero /usr/local/bin/torero || { echo "failed to move torero" >&2; exit 1; }
