@@ -29,8 +29,10 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: torerodev/torero-container
+  DEFAULT_TORERO_VERSION: '1.4.0'  # Update this when new torero versions are released
 
 jobs:
+
   # which platform?
   setup:
     runs-on: ubuntu-latest
@@ -82,14 +84,12 @@ jobs:
             echo "python_version=${{ github.event.inputs.python_version }}" >> $GITHUB_OUTPUT
             echo "opentofu_version=${{ github.event.inputs.opentofu_version }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "release" ]]; then
-            # Extract version from release tag (remove 'v' prefix if present)
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"
-            echo "torero_version=$VERSION" >> $GITHUB_OUTPUT
+            # Use default torero version
+            echo "torero_version=${{ env.DEFAULT_TORERO_VERSION }}" >> $GITHUB_OUTPUT
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for releases
             echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for releases
           else
-            echo "torero_version=1.3.1" >> $GITHUB_OUTPUT
+            echo "torero_version=${{ env.DEFAULT_TORERO_VERSION }}" >> $GITHUB_OUTPUT
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for other builds
             echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for other builds
           fi
@@ -106,11 +106,23 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "image_tags=local-test:pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           else
+            # Determine container version for tagging
+            if [[ "${{ github.event_name }}" == "release" ]]; then
+              CONTAINER_VERSION="${{ github.event.release.tag_name }}"
+              CONTAINER_VERSION="${CONTAINER_VERSION#v}"
+            elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              # For manual runs, use torero version as container version
+              CONTAINER_VERSION="${{ steps.versions.outputs.torero_version }}"
+            else
+              CONTAINER_VERSION="latest"
+            fi
+            
             # For releases and workflow dispatch, tag with architecture suffix
             ARCH_SUFFIX="-${{ matrix.build_args }}"
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}${ARCH_SUFFIX}"
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${CONTAINER_VERSION}${ARCH_SUFFIX}"
             
             echo "image_tags=$TAGS" >> $GITHUB_OUTPUT
+            echo "container_version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
           fi
       
       - name: Build and tag Docker image
@@ -213,29 +225,31 @@ jobs:
       - name: Determine versions
         id: versions
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "torero_version=${{ github.event.inputs.torero_version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "release" ]]; then
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"
-            echo "torero_version=$VERSION" >> $GITHUB_OUTPUT
+          # Determine container version for manifest
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            CONTAINER_VERSION="${{ github.event.release.tag_name }}"
+            CONTAINER_VERSION="${CONTAINER_VERSION#v}"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # For manual runs, use torero version as container version
+            CONTAINER_VERSION="${{ github.event.inputs.torero_version }}"
           else
-            echo "torero_version=1.3.1" >> $GITHUB_OUTPUT
+            CONTAINER_VERSION="latest"
           fi
+          echo "container_version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
       
       - name: Create and push manifest
         run: |
           # Create multi-arch manifest
           docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-arm64
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.container_version }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.container_version }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.container_version }}-arm64
           
           # Also tag as latest for releases
           if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             docker buildx imagetools create \
               -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-amd64 \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}-arm64
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.container_version }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.container_version }}-arm64
           fi
 ...
