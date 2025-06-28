@@ -16,6 +16,11 @@
 #
 set -euo pipefail
 
+# debugging for ci
+if [ "${CI:-false}" = "true" ]; then
+    set -x
+fi
+
 # purpose: build-phase script for torero container
 check_version() {
     if [ -z "${TORERO_VERSION:-}" ]; then
@@ -26,6 +31,8 @@ check_version() {
 
 install_packages() {
     echo "installing dependencies..."
+    echo "Architecture: $(uname -m)"
+    echo "Python version: $(python3 --version 2>&1 || echo 'Python not found')"
     apt-get update -y || { echo "failed to update package list" >&2; exit 1; }
     
     # always install core packages
@@ -139,7 +146,13 @@ setup_python() {
     echo "setting up python environment..."
     
     # upgrade pip and install essential packages
-    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel virtualenv
+    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel virtualenv || {
+        echo "Failed to install Python packages. Python version:" >&2
+        python3 --version >&2
+        echo "pip version:" >&2
+        pip3 --version >&2 || echo "pip3 not found" >&2
+        return 1
+    }
     
     # create a virtual environment for admin user
     if [ -d "/home/admin" ]; then
@@ -152,8 +165,8 @@ setup_python() {
     fi
     
     # verify installation
-    python3 --version
-    pip3 --version
+    python3 --version || { echo "Python verification failed" >&2; return 1; }
+    pip3 --version || { echo "pip verification failed" >&2; return 1; }
 }
 
 
@@ -185,6 +198,16 @@ EOF
 
 main() {
     check_version
+    
+    # Verify Python is available from base image
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "ERROR: Python3 not found in base image" >&2
+        echo "Current PATH: $PATH" >&2
+        echo "Available commands in /usr/local/bin:" >&2
+        ls -la /usr/local/bin/ 2>&1 || echo "Cannot list /usr/local/bin" >&2
+        exit 1
+    fi
+    
     install_packages
     configure_locale
     setup_admin_user
