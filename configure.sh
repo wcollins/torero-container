@@ -138,8 +138,10 @@ install_torero() {
     while [ $attempt -le $max_attempts ]; do
         echo "Download attempt $attempt of $max_attempts"
         
-        if curl -fsSL --connect-timeout 30 --max-time 300 "$torero_url" -o "$torero_tar"; then
+        # Use curl with verbose error reporting
+        if curl -fL --connect-timeout 30 --max-time 300 "$torero_url" -o "$torero_tar" 2>&1; then
             echo "Download successful"
+            echo "File size: $(stat -c%s "$torero_tar" 2>/dev/null || stat -f%z "$torero_tar" 2>/dev/null || echo 'unknown')"
             break
         else
             echo "Download attempt $attempt failed" >&2
@@ -169,7 +171,18 @@ install_torero() {
         echo "Warning: 'file' command not available, skipping file type check"
     fi
     
-    tar -xzf "$torero_tar" -C /tmp || { echo "failed to extract torero" >&2; exit 1; }
+    # Try to extract
+    if ! tar -xzf "$torero_tar" -C /tmp 2>&1; then
+        echo "failed to extract torero" >&2
+        echo "Tar file details:" >&2
+        ls -la "$torero_tar" >&2
+        echo "File type:" >&2
+        file "$torero_tar" >&2 || echo "file command not available" >&2
+        echo "First 200 characters of file:" >&2
+        head -c 200 "$torero_tar" >&2 || true
+        echo "" >&2
+        exit 1
+    fi
     
     mv /tmp/torero /usr/local/bin/torero || { echo "failed to move torero" >&2; exit 1; }
     chmod +x /usr/local/bin/torero || { echo "failed to set torero permissions" >&2; exit 1; }
