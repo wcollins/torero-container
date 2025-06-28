@@ -31,23 +31,28 @@ env:
   IMAGE_NAME: torerodev/torero-container
 
 jobs:
+  # which platform?
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR builds: amd64 only
+            echo 'matrix={"include":[{"platform":"linux/amd64","runner":"ubuntu-latest","build_args":"amd64"}]}' >> $GITHUB_OUTPUT
+          else
+            # Non-PR builds: both platforms
+            echo 'matrix={"include":[{"platform":"linux/amd64","runner":"ubuntu-latest","build_args":"amd64"},{"platform":"linux/arm64","runner":"ubuntu-latest-arm64-4-cores","build_args":"arm64"}]}' >> $GITHUB_OUTPUT
+          fi
+
   build-and-push:
+    needs: setup
     strategy:
-      matrix:
-        include:
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
-          # for PRs: amd64 only on standard runner
-          - platform: linux/amd64
-            runner: ubuntu-latest
-            build_args: "amd64"
-
-          # for releases/scheduled: also build arm64 on ARM runner
-          - platform: linux/arm64
-            runner: ubuntu-latest-arm64-4-cores
-            build_args: "arm64"
-
-    # skip arm64 for PRs
-    if: ${{ github.event_name != 'pull_request' || matrix.platform == 'linux/amd64' }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
