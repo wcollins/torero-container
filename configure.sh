@@ -17,16 +17,9 @@
 set -euo pipefail
 
 # purpose: build-phase script for torero container
-
 check_version() {
     if [ -z "${TORERO_VERSION:-}" ]; then
         echo "error: torero_version must be set" >&2
-        exit 1
-    fi
-    
-    # check if python version is set
-    if [ -z "${PYTHON_VERSION:-}" ]; then
-        echo "error: python_version must be set" >&2
         exit 1
     fi
 }
@@ -50,18 +43,7 @@ install_packages() {
         net-tools \
         unzip \
         locales \
-        build-essential \
-        zlib1g-dev \
-        libncurses5-dev \
-        libgdbm-dev \
-        libnss3-dev \
-        libssl-dev \
-        libreadline-dev \
-        libffi-dev \
-        libsqlite3-dev \
         vim \
-        wget \
-        libbz2-dev \
         || { echo "failed to install core packages" >&2; exit 1; }
         
     # only install ssh-related packages if ssh is enabled
@@ -152,29 +134,9 @@ install_torero() {
     /usr/local/bin/torero version || { echo "torero installation verification failed" >&2; exit 1; }
 }
 
-# set up python with specified version
+# set up python environment
 setup_python() {
-    # extract major.minor version
-    PYTHON_MAJOR_MINOR=$(echo "${PYTHON_VERSION}" | cut -d. -f1,2)
-    
-    echo "setting up python ${PYTHON_VERSION}..."
-    
-    # download and extract python
-    cd /tmp
-    wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz
-    tar -xf Python-${PYTHON_VERSION}.tgz
-    cd Python-${PYTHON_VERSION}
-    
-    # configure and install
-    ./configure --enable-optimizations
-    make -j $(nproc)
-    make altinstall
-    
-    # create symlinks
-    ln -sf /usr/local/bin/python${PYTHON_MAJOR_MINOR} /usr/local/bin/python3
-    ln -sf /usr/local/bin/python3 /usr/local/bin/python
-    ln -sf /usr/local/bin/pip${PYTHON_MAJOR_MINOR} /usr/local/bin/pip3
-    ln -sf /usr/local/bin/pip3 /usr/local/bin/pip
+    echo "setting up python environment..."
     
     # upgrade pip and install essential packages
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel virtualenv
@@ -188,10 +150,6 @@ setup_python() {
         # add activation to .bashrc
         echo 'export PATH="/home/admin/.venvs/default/bin:$PATH"' >> /home/admin/.bashrc
     fi
-    
-    # clean up
-    cd /
-    rm -rf /tmp/Python-${PYTHON_VERSION} /tmp/Python-${PYTHON_VERSION}.tgz
     
     # verify installation
     python3 --version
