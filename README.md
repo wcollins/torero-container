@@ -70,13 +70,12 @@ The following environment variables can be set at runtime:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ENABLE_API`       | `false`  | Enable torero API      |
-| `API_PORT`         | `8000`   | Set API port           |
-| `ENABLE_SSH_ADMIN` | `false`  | Enable SSH admin user  |
-| `INSTALL_OPENTOFU` | `true`   | Install OpenTofu       |
-| `OPENTOFU_VERSION` | `1.9.0`  | Set OpenTofu version   |
-| `PYTHON_VERSION`   | `3.13.0` | Set Python version     |
-| `START_API`        | `false`  | Start torero-api daemon |
+| `ENABLE_API`       | `false`  | Enable torero API       |
+| `API_PORT`         | `8000`   | Set API port            |
+| `ENABLE_SSH_ADMIN` | `false`  | Enable SSH admin user   |
+| `INSTALL_OPENTOFU` | `true`   | Install OpenTofu        |
+| `OPENTOFU_VERSION` | `1.9.0`  | Set OpenTofu version    |
+| `PYTHON_VERSION`   | `3.13.0` | Set Python version      |
 
 ## CLI runner script
 The _cli-runner.sh_ script provides a convenient way to run, test, and do house cleaning locally when running on your workstation. I use it for quick and dirty testing 🚀
