@@ -1,0 +1,25 @@
+---
+services:
+  torero:
+    image: ghcr.io/torerodev/torero-container:latest
+    container_name: torero
+    ports:
+      - "22:22"
+      - "8000:8000"
+    volumes:
+      - ./data:/home/admin/data
+    environment:
+      - ENABLE_API=true
+      - API_PORT=8000
+      - ENABLE_SSH_ADMIN=true
+      - INSTALL_OPENTOFU=true
+      - OPENTOFU_VERSION=1.9.0
+      - PYTHON_VERSION=3.13.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "torero", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+...
