@@ -180,13 +180,23 @@ setup_torero_api() {
         return 1
     }
 
+    # ensure db maps to admin user
+    if [ ! -d "/home/admin/.torero.d" ]; then
+        echo "creating torero database directory for admin user..."
+        mkdir -p /home/admin/.torero.d
+        chown -R admin:admin /home/admin/.torero.d
+        chmod 755 /home/admin/.torero.d
+    fi
+
     # create log file
     touch /home/admin/.torero-api.log
     chown admin:admin /home/admin/.torero-api.log
 
     # start torero-api daemon
     echo "starting torero-api daemon on port ${api_port}..."
-    nohup /usr/local/bin/torero-api --daemon --host 0.0.0.0 --port "${api_port}" --log-file /home/admin/.torero-api.log > /dev/null 2>&1 &
+
+    # run as admin user
+    su - admin -c "nohup /usr/local/bin/torero-api --daemon --host 0.0.0.0 --port ${api_port} --log-file /home/admin/.torero-api.log > /dev/null 2>&1 &"
     
     # success?
     sleep 2
