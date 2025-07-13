@@ -48,6 +48,7 @@ install_packages() {
         iputils-ping \
         iproute2 \
         net-tools \
+        procps \
         unzip \
         file \
         locales \
