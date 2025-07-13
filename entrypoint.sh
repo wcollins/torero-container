@@ -216,6 +216,122 @@ setup_torero_api() {
     return 0
 }
 
+setup_torero_mcp() {
+    if [[ "${ENABLE_MCP}" != "true" ]]; then
+        echo "skipping torero-mcp setup as ENABLE_MCP is not set to true"
+        return 0
+    fi
+
+    # ensure torero-api is running first
+    if [[ "${ENABLE_API}" == "true" ]]; then
+        local api_port="${API_PORT:-8000}"
+        local max_attempts=30
+        local attempt=0
+        
+        echo "waiting for torero-api to be ready on port ${api_port}..."
+        while [ $attempt -lt $max_attempts ]; do
+            if curl -s -o /dev/null -w "%{http_code}" "http://localhost:${api_port}/health" | grep -q "200"; then
+                echo "torero-api is ready"
+                break
+            fi
+            echo "waiting for torero-api... (attempt $((attempt+1))/${max_attempts})"
+            sleep 2
+            attempt=$((attempt+1))
+        done
+        
+        if [ $attempt -eq $max_attempts ]; then
+            echo "warning: torero-api not reachable after ${max_attempts} attempts" >&2
+            return 1
+        fi
+    fi
+
+    # set default MCP configuration
+    local mcp_transport="${TORERO_MCP_TRANSPORT_TYPE:-sse}"
+    local mcp_host="${TORERO_MCP_TRANSPORT_HOST:-0.0.0.0}"
+    local mcp_port="${TORERO_MCP_TRANSPORT_PORT:-8080}"
+    local mcp_path="${TORERO_MCP_TRANSPORT_PATH:-/sse}"
+    local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
+    local api_timeout="${TORERO_API_TIMEOUT:-30}"
+    local log_level="${TORERO_LOG_LEVEL:-INFO}"
+    local mcp_pid_file="${TORERO_MCP_PID_FILE:-/tmp/torero-mcp.pid}"
+    local mcp_log_file="${TORERO_MCP_LOG_FILE:-/home/admin/.torero-mcp.log}"
+
+    echo "setting up torero-mcp with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
+
+    # ensure uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "installing uv package manager..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh || {
+            echo "error: failed to install uv" >&2
+            return 1
+        }
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    # clone and install torero-mcp
+    if [ ! -d "/opt/torero-mcp" ]; then
+        echo "cloning torero-mcp repository..."
+        git clone https://github.com/torerodev/torero-mcp.git /opt/torero-mcp || {
+            echo "error: failed to clone torero-mcp repository" >&2
+            return 1
+        }
+    fi
+
+    cd /opt/torero-mcp
+    echo "installing torero-mcp with uv..."
+    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
+        echo "error: failed to install torero-mcp" >&2
+        return 1
+    }
+
+    # create log file
+    touch "${mcp_log_file}"
+    chown admin:admin "${mcp_log_file}"
+
+    # export environment variables for torero-mcp
+    export TORERO_MCP_TRANSPORT_TYPE="${mcp_transport}"
+    export TORERO_MCP_TRANSPORT_HOST="${mcp_host}"
+    export TORERO_MCP_TRANSPORT_PORT="${mcp_port}"
+    export TORERO_MCP_TRANSPORT_PATH="${mcp_path}"
+    export TORERO_API_BASE_URL="${api_base_url}"
+    export TORERO_API_TIMEOUT="${api_timeout}"
+    export TORERO_LOG_LEVEL="${log_level}"
+    export TORERO_MCP_PID_FILE="${mcp_pid_file}"
+    export TORERO_MCP_LOG_FILE="${mcp_log_file}"
+
+    # start torero-mcp daemon
+    echo "starting torero-mcp daemon with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
+    
+    # run as admin user with environment variables
+    su - admin -c "export TORERO_MCP_TRANSPORT_TYPE='${mcp_transport}' && \
+                   export TORERO_MCP_TRANSPORT_HOST='${mcp_host}' && \
+                   export TORERO_MCP_TRANSPORT_PORT='${mcp_port}' && \
+                   export TORERO_MCP_TRANSPORT_PATH='${mcp_path}' && \
+                   export TORERO_API_BASE_URL='${api_base_url}' && \
+                   export TORERO_API_TIMEOUT='${api_timeout}' && \
+                   export TORERO_LOG_LEVEL='${log_level}' && \
+                   export TORERO_MCP_PID_FILE='${mcp_pid_file}' && \
+                   export TORERO_MCP_LOG_FILE='${mcp_log_file}' && \
+                   nohup /usr/local/bin/torero-mcp run --transport ${mcp_transport} --host ${mcp_host} --port ${mcp_port} > /dev/null 2>&1 &"
+    
+    # verify startup
+    sleep 3
+    if [ -f "${mcp_pid_file}" ] && kill -0 $(cat "${mcp_pid_file}") 2>/dev/null; then
+        echo "torero-mcp daemon started successfully on ${mcp_host}:${mcp_port}"
+        
+        # update manifest if available
+        if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
+            jq ".services.torero_mcp = {\"enabled\": true, \"transport\": \"${mcp_transport}\", \"host\": \"${mcp_host}\", \"port\": ${mcp_port}}" /etc/torero-image-manifest.json > /tmp/manifest.json
+            mv /tmp/manifest.json /etc/torero-image-manifest.json
+        fi
+    else
+        echo "warning: torero-mcp daemon failed to start" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 # check if ssh access is needed but not configured at build time
 setup_ssh_runtime() {
     if [ "${ENABLE_SSH_ADMIN}" = "true" ]; then
@@ -266,4 +382,5 @@ setup_ssh_runtime
 handle_torero_eula
 install_opentofu || echo "opentofu installation failed, continuing without it"
 setup_torero_api || echo "torero-api setup failed, continuing without it"
+setup_torero_mcp || echo "torero-mcp setup failed, continuing without it"
 exec "$@"

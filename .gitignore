@@ -1,0 +1,50 @@
+# data dir
+data/
+
+# build artifacts
+*.tar
+*.tar.gz
+*.zip
+
+# docker
+.docker/
+docker-compose.override.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+*.sublime-*
+
+# temp files
+*.tmp
+*.temp
+*.log
+*.pid
+
+# backup files
+*.bak
+*.backup
+*.old
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+.venv
+
+# requirements / BRD
+requirements.md
+
+# notes
+notes.md

@@ -33,6 +33,8 @@ REPO_DIR="$PWD"
 ENABLE_SSH="false"
 ENABLE_API="false"
 API_PORT="8000"
+ENABLE_MCP="false"
+MCP_PORT="8080"
 
 # fancy colors for output
 GREEN='\033[0;32m'
@@ -60,6 +62,8 @@ usage() {
     echo "  --enable-ssh    Enable SSH access in the container (with --run)"
     echo "  --enable-api    Enable torero-api in the container (with --run)"
     echo "  --api-port PORT Set the API port (default: 8000, with --enable-api)"
+    echo "  --enable-mcp    Enable torero-mcp in the container (with --run)"
+    echo "  --mcp-port PORT Set the MCP port (default: 8080, with --enable-mcp)"
     echo "  --help          Display this help message"
     echo
     echo -e "${BLUE}Configuration:${NC}"
@@ -71,12 +75,16 @@ usage() {
     echo "  ENABLE_SSH=${ENABLE_SSH}"
     echo "  ENABLE_API=${ENABLE_API}"
     echo "  API_PORT=${API_PORT}"
+    echo "  ENABLE_MCP=${ENABLE_MCP}"
+    echo "  MCP_PORT=${MCP_PORT}"
     echo
     echo -e "${BLUE}Examples:${NC}"
     echo "  $0 --build --run                     # Build image and run container"
     echo "  $0 --run --enable-ssh                # Run container with SSH enabled"
     echo "  $0 --run --enable-api                # Run container with API enabled"
     echo "  $0 --run --enable-api --api-port 9000 # Run container with API on port 9000"
+    echo "  $0 --run --enable-mcp                # Run container with MCP enabled"
+    echo "  $0 --run --enable-mcp --mcp-port 9080 # Run container with MCP on port 9080"
     echo "  $0 --exec \"torero version\"         # Run torero command in container"
     echo "  $0 --exec \"tofu version\"           # Run OpenTofu command in container"
     echo "  $0 --exec \"python3 --version\"      # Check Python version in container"
@@ -159,6 +167,11 @@ run_container() {
         echo -e "${BLUE}torero-api will be enabled on port ${API_PORT}${NC}"
     fi
     
+    if [ "$ENABLE_MCP" = "true" ]; then
+        PORT_MAPPING="$PORT_MAPPING -p $MCP_PORT:$MCP_PORT"
+        echo -e "${BLUE}torero-mcp will be enabled on port ${MCP_PORT}${NC}"
+    fi
+    
     docker run -d \
         --name "$CONTAINER_NAME" \
         $PORT_MAPPING \
@@ -168,6 +181,8 @@ run_container() {
         -e ENABLE_SSH_ADMIN="$ENABLE_SSH" \
         -e ENABLE_API="$ENABLE_API" \
         -e API_PORT="$API_PORT" \
+        -e ENABLE_MCP="$ENABLE_MCP" \
+        -e TORERO_MCP_TRANSPORT_PORT="$MCP_PORT" \
         "$IMAGE_NAME"
 
     # check if container started successfully
@@ -206,6 +221,16 @@ display_container_info() {
             echo -e "${BLUE}API access:${NC} http://localhost:${CONTAINER_API_PORT:-8000}"
         else
             echo -e "${BLUE}API access:${NC} Disabled (use --enable-api to enable)"
+        fi
+        
+        # check if mcp is enabled
+        CONTAINER_MCP=$(docker inspect -f '{{.Config.Env}}' $CONTAINER_NAME | grep -o "ENABLE_MCP=true")
+        if [ -n "$CONTAINER_MCP" ]; then
+            # Extract MCP port from env vars
+            CONTAINER_MCP_PORT=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' $CONTAINER_NAME | grep "TORERO_MCP_TRANSPORT_PORT=" | cut -d'=' -f2)
+            echo -e "${BLUE}MCP access:${NC} http://localhost:${CONTAINER_MCP_PORT:-8080}/sse"
+        else
+            echo -e "${BLUE}MCP access:${NC} Disabled (use --enable-mcp to enable)"
         fi
         
         echo -e "${BLUE}Data directory:${NC} $DATA_DIR"
@@ -509,6 +534,18 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             API_PORT="$2"
+            shift 2
+            ;;
+        --enable-mcp)
+            ENABLE_MCP="true"
+            shift
+            ;;
+        --mcp-port)
+            if [ $# -lt 2 ]; then
+                echo -e "${RED}Error: --mcp-port requires a port number${NC}"
+                exit 1
+            fi
+            MCP_PORT="$2"
             shift 2
             ;;
         --help)
