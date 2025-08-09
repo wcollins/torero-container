@@ -16,83 +16,93 @@
 #
 set -eo pipefail
 
-install_opentofu() {
-    if [[ "${INSTALL_OPENTOFU}" == "false" ]]; then
-        echo "skipping opentofu installation as INSTALL_OPENTOFU=false"
-        return 0
+install_opentofu_version() {
+    local target_version="$1"
+    local arch=$(dpkg --print-architecture)
+    local tofu_arch=""
+    
+    if [ "$arch" = "amd64" ]; then
+        tofu_arch="amd64"
+    elif [ "$arch" = "arm64" ]; then
+        tofu_arch="arm64"
+    else
+        echo "error: unsupported architecture: $arch" >&2
+        return 1
     fi
+    
+    echo "installing OpenTofu ${target_version}..."
+    
+    # download and install the specified version
+    if ! curl -L -o /tmp/tofu.zip "https://github.com/opentofu/opentofu/releases/download/v${target_version}/tofu_${target_version}_linux_${tofu_arch}.zip"; then
+        echo "error: failed to download OpenTofu ${target_version}" >&2
+        return 1
+    fi
+    
+    if ! unzip -o /tmp/tofu.zip -d /tmp; then
+        echo "error: failed to extract OpenTofu ${target_version}" >&2
+        rm -f /tmp/tofu.zip
+        return 1
+    fi
+    
+    if ! mv /tmp/tofu /usr/local/bin/tofu; then
+        echo "error: failed to install OpenTofu ${target_version}" >&2
+        rm -f /tmp/tofu.zip /tmp/tofu
+        return 1
+    fi
+    
+    chmod +x /usr/local/bin/tofu
+    rm -f /tmp/tofu.zip /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+    
+    echo "OpenTofu ${target_version} installed successfully"
+    return 0
+}
 
+verify_opentofu() {
+    local runtime_version="${OPENTOFU_VERSION:-}"
+    local build_version="${TOFU_BUILD_VERSION:-1.10.5}"
+    
+    # check if OpenTofu is installed
     if command -v tofu &> /dev/null; then
-        INSTALLED_VERSION=$(tofu version | grep -oP "v\K[0-9]+\.[0-9]+\.[0-9]+" | head -1)
-        if [[ "${INSTALLED_VERSION}" == "${OPENTOFU_VERSION}" ]]; then
-            echo "opentofu ${OPENTOFU_VERSION} is already installed"
+        local installed_version=$(tofu version | grep -oP "v\K[0-9]+\.[0-9]+\.[0-9]+" | head -1 || echo "unknown")
+        
+        # if runtime version is specified and different from installed, install new version
+        if [ -n "$runtime_version" ] && [ "$runtime_version" != "$installed_version" ]; then
+            echo "OpenTofu ${installed_version} is pre-installed, but OPENTOFU_VERSION=${runtime_version} requested"
+            if install_opentofu_version "$runtime_version"; then
+                installed_version="$runtime_version"
+                echo "OpenTofu switched to version ${runtime_version}"
+            else
+                echo "warning: failed to install requested version ${runtime_version}, using pre-installed ${installed_version}" >&2
+            fi
+        else
+            if [ -n "$runtime_version" ]; then
+                echo "OpenTofu ${installed_version} matches requested version ${runtime_version}"
+            else
+                echo "OpenTofu ${installed_version} is pre-installed (use OPENTOFU_VERSION env var to override)"
+            fi
+        fi
+        
+        # update manifest if present
+        if [ -f "/etc/torero-image-manifest.json" ]; then
+            if command -v jq &> /dev/null; then
+                jq ".tools.opentofu = \"${installed_version}\"" /etc/torero-image-manifest.json > /tmp/manifest.json
+                mv /tmp/manifest.json /etc/torero-image-manifest.json
+            else
+                echo "jq not found, skipping manifest update"
+            fi
+        fi
+        return 0
+    else
+        # if no OpenTofu found, install the requested or default version
+        local target_version="${runtime_version:-$build_version}"
+        echo "OpenTofu binary not found, installing version ${target_version}"
+        if install_opentofu_version "$target_version"; then
             return 0
         else
-            echo "replacing opentofu ${INSTALLED_VERSION} with ${OPENTOFU_VERSION}"
-        fi
-    else
-        echo "installing opentofu version ${OPENTOFU_VERSION}..."
-    fi
-
-    # detect architecture
-    local arch=""
-    case "$(uname -m)" in
-        x86_64|amd64)
-            arch="amd64"
-            ;;
-        aarch64|arm64)
-            arch="arm64"
-            ;;
-        *)
-            echo "warning: unsupported architecture $(uname -m) for opentofu" >&2
+            echo "error: failed to install OpenTofu ${target_version}" >&2
             return 1
-            ;;
-    esac
-    
-    local os="linux"
-    local opentofu_url="https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_${os}_${arch}.zip"
-    local opentofu_zip="/tmp/opentofu.zip"
-
-    curl -L "$opentofu_url" -o "$opentofu_zip" || { 
-        echo "warning: failed to download opentofu v${OPENTOFU_VERSION}" >&2 
-        return 1
-    }
-    
-    mkdir -p /tmp/opentofu
-    unzip -q "$opentofu_zip" -d /tmp/opentofu || { 
-        echo "warning: failed to extract opentofu" >&2 
-        return 1
-    }
-    
-    mv /tmp/opentofu/tofu /usr/local/bin/tofu || { 
-        echo "warning: failed to move opentofu" >&2 
-        return 1
-    }
-    
-    rm -f "$opentofu_zip"
-    rm -rf /tmp/opentofu
-    
-    chmod +x /usr/local/bin/tofu || { 
-        echo "warning: failed to set opentofu permissions" >&2 
-        return 1
-    }
-    
-    /usr/local/bin/tofu version || { 
-        echo "warning: opentofu installation verification failed" >&2 
-        return 1
-    }
-
-    if [ -f "/etc/torero-image-manifest.json" ]; then
-        if command -v jq &> /dev/null; then
-            jq ".tools.opentofu = \"${OPENTOFU_VERSION}\"" /etc/torero-image-manifest.json > /tmp/manifest.json
-            mv /tmp/manifest.json /etc/torero-image-manifest.json
-        else
-            echo "jq not found, skipping manifest update"
         fi
     fi
-
-    echo "opentofu ${OPENTOFU_VERSION} installation complete for ${arch} architecture"
-    return 0
 }
 
 configure_dns() {
@@ -380,7 +390,7 @@ setup_ssh_runtime() {
 configure_dns
 setup_ssh_runtime
 handle_torero_eula
-install_opentofu || echo "opentofu installation failed, continuing without it"
+verify_opentofu || echo "OpenTofu verification failed, continuing without it"
 setup_torero_api || echo "torero-api setup failed, continuing without it"
 setup_torero_mcp || echo "torero-mcp setup failed, continuing without it"
 exec "$@"

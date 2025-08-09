@@ -28,7 +28,7 @@ docker run -d -p 2222:22 ghcr.io/torerodev/torero-container:latest
 
 ![docker cli](./img/docker-cli.gif)
 
-### docker compose _(with latest OpenTofu version)_
+### docker compose _(with custom OpenTofu version)_
 ```yaml
 ---
 services:
@@ -36,18 +36,17 @@ services:
     image: ghcr.io/torerodev/torero-container:latest
     container_name: torero
     ports:
-      - "22:22"                # use when ENABLE_SSH_ADMIN=true
-      - "8000:8000"            # use when ENABLE_API=true
-      - "8080:8080"            # use when ENABLE_MCP=true
+      - "22:22"                  # use when ENABLE_SSH_ADMIN=true
+      - "8000:8000"              # use when ENABLE_API=true
+      - "8080:8080"              # use when ENABLE_MCP=true
     volumes:
       - ./data:/home/admin/data
     environment:
-      - ENABLE_API=true        # enable and run torero api
-      - API_PORT=8000          # api port
-      - ENABLE_MCP=true        # enable torero-mcp server
-      - ENABLE_SSH_ADMIN=true  # enable ssh admin at runtime
-      - INSTALL_OPENTOFU=true  # enable OpenTofu installation at runtime
-      - OPENTOFU_VERSION=1.9.0
+      - ENABLE_API=true          # enable and run torero api
+      - API_PORT=8000            # api port
+      - ENABLE_MCP=true          # enable torero-mcp server
+      - ENABLE_SSH_ADMIN=true    # enable ssh admin at runtime
+      - OPENTOFU_VERSION=1.9.0   # override OpenTofu version at runtime (optional)
       - PYTHON_VERSION=3.13.0
     restart: unless-stopped
     healthcheck:
@@ -77,8 +76,7 @@ The following environment variables can be set at runtime:
 | `API_PORT`         | `8000`   | Set API port            |
 | `ENABLE_MCP`       | `false`  | Enable torero MCP server|
 | `ENABLE_SSH_ADMIN` | `false`  | Enable SSH admin user   |
-| `INSTALL_OPENTOFU` | `true`   | Install OpenTofu        |
-| `OPENTOFU_VERSION` | `1.9.0`  | Set OpenTofu version    |
+| `OPENTOFU_VERSION`     | `1.10.5` | Override OpenTofu version at runtime |
 | `PYTHON_VERSION`   | `3.13.0` | Set Python version      |
 
 #### MCP Server Environment Variables
@@ -95,6 +93,23 @@ When `ENABLE_MCP=true`, the following additional environment variables are avail
 | `TORERO_LOG_LEVEL` | `INFO` | Logging level |
 | `TORERO_MCP_PID_FILE` | `/tmp/torero-mcp.pid` | PID file location |
 | `TORERO_MCP_LOG_FILE` | `/home/admin/.torero-mcp.log` | Log file path |
+
+### OpenTofu Version Management
+The container comes with OpenTofu 1.10.5 (latest stable) pre-installed at build time. You can override this at runtime using the `OPENTOFU_VERSION` environment variable:
+
+```bash
+# Use a different OpenTofu version
+docker run -e OPENTOFU_VERSION=1.8.5 ghcr.io/torerodev/torero-container:latest
+
+# Or with docker-compose
+services:
+  torero:
+    image: ghcr.io/torerodev/torero-container:latest
+    environment:
+      - OPENTOFU_VERSION=1.9.0  # Will download and install 1.9.0 at startup
+```
+
+The container will automatically download and install the requested version at startup if it differs from the pre-installed version. If no `OPENTOFU_VERSION` is specified, it uses the pre-installed version (1.10.5).
 
 ## CLI runner script
 The _cli-runner.sh_ script provides a convenient way to run, test, and do house cleaning locally when running on your workstation. I use it for quick and dirty testing 🚀

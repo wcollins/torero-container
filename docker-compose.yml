@@ -4,16 +4,17 @@ services:
     image: ghcr.io/torerodev/torero-container:latest
     container_name: torero
     ports:
-      - "22:22"
-      - "8000:8000"
+      - "22:22"                 # use when ENABLE_SSH_ADMIN=true
+      - "8000:8000"             # use when ENABLE_API=true
+      - "8080:8080"             # use when ENABLE_MCP=true
     volumes:
       - ./data:/home/admin/data
     environment:
-      - ENABLE_API=true
-      - API_PORT=8000
-      - ENABLE_SSH_ADMIN=true
-      - INSTALL_OPENTOFU=true
-      - OPENTOFU_VERSION=1.9.0
+      - ENABLE_API=true         # enable and run torero api
+      - API_PORT=8000           # api port
+      - ENABLE_MCP=true         # enable torero-mcp server
+      - ENABLE_SSH_ADMIN=true   # enable ssh admin at runtime
+      - OPENTOFU_VERSION=1.9.0  # override OpenTofu version at runtime (optional)
       - PYTHON_VERSION=3.13.0
     restart: unless-stopped
     healthcheck:

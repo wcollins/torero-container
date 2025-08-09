@@ -17,10 +17,10 @@ on:
         description: 'Python version to install'
         required: true
         default: '3.13.0'
-      opentofu_version:
-        description: 'OpenTofu version to test'
+      tofu_version:
+        description: 'OpenTofu version to build with'
         required: false
-        default: '1.9.1'
+        default: '1.10.5'
 
   # rebuild weekly to keep things secure and up-to-date
   schedule:
@@ -85,17 +85,17 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "torero_version=${{ github.event.inputs.torero_version }}" >> $GITHUB_OUTPUT
             echo "python_version=${{ github.event.inputs.python_version }}" >> $GITHUB_OUTPUT
-            echo "opentofu_version=${{ github.event.inputs.opentofu_version }}" >> $GITHUB_OUTPUT
+            echo "tofu_version=${{ github.event.inputs.tofu_version }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "release" ]]; then
             # Use default torero version
             echo "Using default torero version: ${{ env.DEFAULT_TORERO_VERSION }}"
             echo "torero_version=${{ env.DEFAULT_TORERO_VERSION }}" >> $GITHUB_OUTPUT
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for releases
-            echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for releases
+            echo "tofu_version=1.10.5" >> $GITHUB_OUTPUT  # default opentofu version for releases
           else
             echo "torero_version=${{ env.DEFAULT_TORERO_VERSION }}" >> $GITHUB_OUTPUT
             echo "python_version=3.13.0" >> $GITHUB_OUTPUT  # default python version for other builds
-            echo "opentofu_version=1.9.1" >> $GITHUB_OUTPUT  # default opentofu version for other builds
+            echo "tofu_version=1.10.5" >> $GITHUB_OUTPUT  # default opentofu version for other builds
           fi
           
           echo "Final torero_version: $(grep torero_version $GITHUB_OUTPUT | cut -d= -f2)"
@@ -153,6 +153,7 @@ jobs:
           build-args: |
             TORERO_VERSION=${{ steps.versions.outputs.torero_version }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
+            OPENTOFU_VERSION=${{ steps.versions.outputs.tofu_version }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
       
@@ -163,7 +164,8 @@ jobs:
             echo "Building single-platform test image for PR validation..."
             docker build -f Containerfile -t pr-test:${{ github.event.pull_request.number }} \
               --build-arg TORERO_VERSION=${{ steps.versions.outputs.torero_version }} \
-              --build-arg PYTHON_VERSION=${{ steps.versions.outputs.python_version }} .
+              --build-arg PYTHON_VERSION=${{ steps.versions.outputs.python_version }} \
+              --build-arg OPENTOFU_VERSION=${{ steps.versions.outputs.tofu_version }} .
             TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
             # For releases, the image should be available in the registry
@@ -177,21 +179,17 @@ jobs:
           # test python installation
           docker run --rm $TEST_IMAGE python3 --version
       
-      - name: test OpenTofu installation
+      - name: test OpenTofu pre-installation
         run: |
           # For PRs, use the test image we built
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
-            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.torero_version }}"
+            TEST_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.container_version }}-${{ matrix.build_args }}"
           fi
           
-          # test OpenTofu installation
-          docker run --rm \
-            -e INSTALL_OPENTOFU=true \
-            -e OPENTOFU_VERSION=${{ steps.versions.outputs.opentofu_version }} \
-            $TEST_IMAGE \
-            bash -c "tofu version || exit 0"
+          # test that OpenTofu is pre-installed at build time
+          docker run --rm $TEST_IMAGE tofu version
       
       - name: run vulnerability scanner
         uses: aquasecurity/trivy-action@master

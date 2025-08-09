@@ -8,6 +8,10 @@ variable "PYTHON_VERSION" {
   default = "3.13.0"
 }
 
+variable "OPENTOFU_VERSION" {
+  default = "1.10.5"
+}
+
 variable "REGISTRY" {
   default = "ghcr.io"
 }
@@ -39,6 +43,7 @@ target "default" {
   args = {
     TORERO_VERSION = TORERO_VERSION
     PYTHON_VERSION = PYTHON_VERSION
+    OPENTOFU_VERSION = OPENTOFU_VERSION
   }
   
   cache-from = [
