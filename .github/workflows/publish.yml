@@ -153,7 +153,7 @@ jobs:
           build-args: |
             TORERO_VERSION=${{ steps.versions.outputs.torero_version }}
             PYTHON_VERSION=${{ steps.versions.outputs.python_version }}
-            TOFU_VERSION=${{ steps.versions.outputs.tofu_version }}
+            OPENTOFU_VERSION=${{ steps.versions.outputs.tofu_version }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
       
@@ -165,7 +165,7 @@ jobs:
             docker build -f Containerfile -t pr-test:${{ github.event.pull_request.number }} \
               --build-arg TORERO_VERSION=${{ steps.versions.outputs.torero_version }} \
               --build-arg PYTHON_VERSION=${{ steps.versions.outputs.python_version }} \
-              --build-arg TOFU_VERSION=${{ steps.versions.outputs.tofu_version }} .
+              --build-arg OPENTOFU_VERSION=${{ steps.versions.outputs.tofu_version }} .
             TEST_IMAGE="pr-test:${{ github.event.pull_request.number }}"
           else
             # For releases, the image should be available in the registry
