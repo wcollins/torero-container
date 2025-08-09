@@ -28,7 +28,7 @@ SSH_PORT=2222
 DATA_DIR="$PWD/torero-data"
 TORERO_VERSION="${TORERO_VERSION:-1.4.0}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.13.0}"
-OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.9.1}"
+# OpenTofu is now pre-installed at build time, version specified in Containerfile
 REPO_DIR="$PWD"
 ENABLE_SSH="false"
 ENABLE_API="false"
@@ -69,7 +69,7 @@ usage() {
     echo -e "${BLUE}Configuration:${NC}"
     echo "  TORERO_VERSION=${TORERO_VERSION}"
     echo "  PYTHON_VERSION=${PYTHON_VERSION}"
-    echo "  OPENTOFU_VERSION=${OPENTOFU_VERSION}"
+    echo "  OpenTofu: Pre-installed at build time"
     echo "  DATA_DIR=${DATA_DIR}"
     echo "  SSH_PORT=${SSH_PORT}"
     echo "  ENABLE_SSH=${ENABLE_SSH}"
@@ -154,7 +154,7 @@ run_container() {
     echo -e "${BLUE}Created data directory at: ${DATA_DIR}${NC}"
 
     # run new container
-    echo -e "${BLUE}Starting new torero container with OpenTofu ${OPENTOFU_VERSION}...${NC}"
+    echo -e "${BLUE}Starting new torero container...${NC}"
     
     PORT_MAPPING=""
     if [ "$ENABLE_SSH" = "true" ]; then
@@ -176,8 +176,6 @@ run_container() {
         --name "$CONTAINER_NAME" \
         $PORT_MAPPING \
         -v "$DATA_DIR:/home/admin/data" \
-        -e INSTALL_OPENTOFU=true \
-        -e OPENTOFU_VERSION="$OPENTOFU_VERSION" \
         -e ENABLE_SSH_ADMIN="$ENABLE_SSH" \
         -e ENABLE_API="$ENABLE_API" \
         -e API_PORT="$API_PORT" \
@@ -236,7 +234,7 @@ display_container_info() {
         echo -e "${BLUE}Data directory:${NC} $DATA_DIR"
         echo -e "${BLUE}Torero version:${NC} $TORERO_VERSION"
         echo -e "${BLUE}Python version:${NC} $PYTHON_VERSION"
-        echo -e "${BLUE}OpenTofu version:${NC} $OPENTOFU_VERSION"
+        echo -e "${BLUE}OpenTofu:${NC} Pre-installed at build time"
         echo -e "${BLUE}Container status:${NC} $(docker inspect -f '{{.State.Status}}' $CONTAINER_NAME)"
         
         # get ip of container
