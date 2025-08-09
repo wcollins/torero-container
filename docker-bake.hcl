@@ -8,7 +8,7 @@ variable "PYTHON_VERSION" {
   default = "3.13.0"
 }
 
-variable "TOFU_VERSION" {
+variable "OPENTOFU_VERSION" {
   default = "1.10.5"
 }
 
@@ -43,7 +43,7 @@ target "default" {
   args = {
     TORERO_VERSION = TORERO_VERSION
     PYTHON_VERSION = PYTHON_VERSION
-    TOFU_VERSION = TOFU_VERSION
+    OPENTOFU_VERSION = OPENTOFU_VERSION
   }
   
   cache-from = [
