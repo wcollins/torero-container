@@ -16,12 +16,71 @@
 #
 set -eo pipefail
 
-verify_opentofu() {
+install_opentofu_version() {
+    local target_version="$1"
+    local arch=$(dpkg --print-architecture)
+    local tofu_arch=""
+    
+    if [ "$arch" = "amd64" ]; then
+        tofu_arch="amd64"
+    elif [ "$arch" = "arm64" ]; then
+        tofu_arch="arm64"
+    else
+        echo "error: unsupported architecture: $arch" >&2
+        return 1
+    fi
+    
+    echo "installing OpenTofu ${target_version}..."
+    
+    # download and install the specified version
+    if ! curl -L -o /tmp/tofu.zip "https://github.com/opentofu/opentofu/releases/download/v${target_version}/tofu_${target_version}_linux_${tofu_arch}.zip"; then
+        echo "error: failed to download OpenTofu ${target_version}" >&2
+        return 1
+    fi
+    
+    if ! unzip -o /tmp/tofu.zip -d /tmp; then
+        echo "error: failed to extract OpenTofu ${target_version}" >&2
+        rm -f /tmp/tofu.zip
+        return 1
+    fi
+    
+    if ! mv /tmp/tofu /usr/local/bin/tofu; then
+        echo "error: failed to install OpenTofu ${target_version}" >&2
+        rm -f /tmp/tofu.zip /tmp/tofu
+        return 1
+    fi
+    
+    chmod +x /usr/local/bin/tofu
+    rm -f /tmp/tofu.zip /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+    
+    echo "OpenTofu ${target_version} installed successfully"
+    return 0
+}
 
-    # installed at build time
+verify_opentofu() {
+    local runtime_version="${OPENTOFU_VERSION:-}"
+    local build_version="${TOFU_BUILD_VERSION:-1.10.5}"
+    
+    # check if OpenTofu is installed
     if command -v tofu &> /dev/null; then
         local installed_version=$(tofu version | grep -oP "v\K[0-9]+\.[0-9]+\.[0-9]+" | head -1 || echo "unknown")
-        echo "OpenTofu ${installed_version} is pre-installed at build time"
+        
+        # if runtime version is specified and different from installed, install new version
+        if [ -n "$runtime_version" ] && [ "$runtime_version" != "$installed_version" ]; then
+            echo "OpenTofu ${installed_version} is pre-installed, but OPENTOFU_VERSION=${runtime_version} requested"
+            if install_opentofu_version "$runtime_version"; then
+                installed_version="$runtime_version"
+                echo "OpenTofu switched to version ${runtime_version}"
+            else
+                echo "warning: failed to install requested version ${runtime_version}, using pre-installed ${installed_version}" >&2
+            fi
+        else
+            if [ -n "$runtime_version" ]; then
+                echo "OpenTofu ${installed_version} matches requested version ${runtime_version}"
+            else
+                echo "OpenTofu ${installed_version} is pre-installed (use OPENTOFU_VERSION env var to override)"
+            fi
+        fi
         
         # update manifest if present
         if [ -f "/etc/torero-image-manifest.json" ]; then
@@ -34,8 +93,15 @@ verify_opentofu() {
         fi
         return 0
     else
-        echo "warning: OpenTofu binary not found (should be pre-installed)" >&2
-        return 1
+        # if no OpenTofu found, install the requested or default version
+        local target_version="${runtime_version:-$build_version}"
+        echo "OpenTofu binary not found, installing version ${target_version}"
+        if install_opentofu_version "$target_version"; then
+            return 0
+        else
+            echo "error: failed to install OpenTofu ${target_version}" >&2
+            return 1
+        fi
     fi
 }
 
