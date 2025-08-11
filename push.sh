@@ -16,15 +16,21 @@
 #
 # Manual build and push to GHCR
 
+# Source .env file if it exists to get default versions
+if [ -f .env ]; then
+    source .env
+fi
+
 # display usage
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -v, --version VERSION          Container version (default: 1.4.0)"
-    echo "  -t, --torero-version VERSION   Torero version (default: 1.4.0)"
-    echo "  -p, --python-version VERSION   Python version (default: 3.13.0)"
-    echo "  -u, --username USERNAME        GitHub username"
-    echo "  -h, --help                     Show this help message"
+    echo "  -v, --version VERSION              Container version (default: ${VERSION:-1.4.0})"
+    echo "  -t, --torero-version VERSION       Torero version (default: ${TORERO_VERSION:-1.4.0})"
+    echo "  -p, --python-version VERSION       Python version (default: ${PYTHON_VERSION:-3.13.0})"
+    echo "  -o, --opentofu-version VERSION     OpenTofu version (default: ${OPENTOFU_VERSION:-1.10.5})"
+    echo "  -u, --username USERNAME            GitHub username"
+    echo "  -h, --help                         Show this help message"
 }
 
 # prompt for a value if not provided
@@ -68,6 +74,10 @@ while [[ $# -gt 0 ]]; do
             PYTHON_VERSION="$2"
             shift 2
             ;;
+        -o|--opentofu-version)
+            OPENTOFU_VERSION="$2"
+            shift 2
+            ;;
         -u|--username)
             GITHUB_USERNAME="$2"
             shift 2
@@ -85,9 +95,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # prompt for missing values
-prompt_for_value "VERSION" "Enter container version" "1.4.0"
-prompt_for_value "TORERO_VERSION" "Enter Torero version" "1.4.0"
-prompt_for_value "PYTHON_VERSION" "Enter Python version" "3.13.0"
+prompt_for_value "VERSION" "Enter container version" "${VERSION:-1.4.0}"
+prompt_for_value "TORERO_VERSION" "Enter Torero version" "${TORERO_VERSION:-1.4.0}"
+prompt_for_value "PYTHON_VERSION" "Enter Python version" "${PYTHON_VERSION:-3.13.0}"
+prompt_for_value "OPENTOFU_VERSION" "Enter OpenTofu version" "${OPENTOFU_VERSION:-1.10.5}"
 prompt_for_value "GITHUB_USERNAME" "Enter GitHub username"
 
 # login to GHCR
@@ -100,12 +111,14 @@ echo "Building image..."
 docker build -t ${REGISTRY}/${IMAGE_NAME}:${VERSION} \
   --build-arg TORERO_VERSION=${TORERO_VERSION} \
   --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
+  --build-arg OPENTOFU_VERSION=${OPENTOFU_VERSION} \
   -f Containerfile .
 
 # test the image
 echo "Testing image..."
 docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} torero version
 docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} python3 --version
+docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} tofu version
 
 # build and push multi-arch using buildx
 echo "Building and pushing multi-arch image..."
@@ -115,6 +128,7 @@ docker buildx build \
   --tag ${REGISTRY}/${IMAGE_NAME}:latest \
   --build-arg TORERO_VERSION=${TORERO_VERSION} \
   --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
+  --build-arg OPENTOFU_VERSION=${OPENTOFU_VERSION} \
   --push \
   -f Containerfile .
 
