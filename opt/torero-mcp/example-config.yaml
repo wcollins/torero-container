@@ -1,0 +1,36 @@
+# torero MCP Server Configuration Example
+
+api:
+  # Base URL for the torero API
+  base_url: "http://localhost:8000"
+  
+  # Request timeout in seconds
+  timeout: 30
+  
+logging:
+
+  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+mcp:
+  # Server name
+  name: "torero"
+  
+  # Server version
+  version: "0.1.0"
+  
+  # Transport configuration
+  transport:
+
+    # Transport type: stdio (default), sse, or streamable_http
+    type: "stdio"
+    
+    # Settings for SSE/HTTP transport (ignored for stdio)
+    host: "localhost"
+    port: 8080
+    
+    # SSE-specific settings
+    path: "/sse"

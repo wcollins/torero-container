@@ -35,7 +35,7 @@ install_packages() {
     echo "Python version: $(python3 --version 2>&1 || echo 'Python not found')"
     apt-get update -y || { echo "failed to update package list" >&2; exit 1; }
     
-    # always install core packages
+    # install all core packages including curl and unzip for OpenTofu
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -53,48 +53,18 @@ install_packages() {
         file \
         locales \
         vim \
+        bc \
         || { echo "failed to install core packages" >&2; exit 1; }
-        
-    # only install ssh-related packages if ssh is enabled
-    if [ "${ENABLE_SSH_ADMIN:-false}" = "true" ]; then
-        apt-get install -y --no-install-recommends \
-            openssh-server \
-            sudo || { echo "failed to install SSH packages" >&2; exit 1; }
-    fi
 }
 
 setup_admin_user() {
     echo "setting up admin user..."
     useradd -m -s /bin/bash admin || { echo "failed to create admin user" >&2; exit 1; }
     
-    # only set password if ssh is enabled
-    if [ "${ENABLE_SSH_ADMIN:-false}" = "true" ]; then
-        echo "admin:admin" | chpasswd || { echo "failed to set admin password" >&2; exit 1; }
-        echo "admin ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/admin
-        chmod 0440 /etc/sudoers.d/admin || { echo "failed to set sudoers permissions" >&2; exit 1; }
-    fi
-    
     mkdir -p /home/admin/data
     chown admin:admin /home/admin/data
 }
 
-configure_ssh() {
-    echo "configuring ssh..."
-    mkdir -p /var/run/sshd
-    echo "PermitRootLogin no" >> /etc/ssh/sshd_config
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
-    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
-    echo "PermitEmptyPasswords no" >> /etc/ssh/sshd_config
-    echo "LoginGraceTime 120" >> /etc/ssh/sshd_config
-    
-    mkdir -p /home/admin/.ssh
-    chmod 700 /home/admin/.ssh
-    touch /home/admin/.ssh/authorized_keys
-    chmod 600 /home/admin/.ssh/authorized_keys
-    chown -R admin:admin /home/admin/.ssh
-    
-    ssh-keygen -A
-}
 
 configure_locale() {
     echo "configuring locale..."
@@ -107,6 +77,76 @@ configure_locale() {
     # add to environment
     echo "export LANG=en_US.UTF-8" >> /etc/profile.d/locale.sh
     echo "export LC_ALL=en_US.UTF-8" >> /etc/profile.d/locale.sh
+}
+
+install_opentofu() {
+    local version="${OPENTOFU_BUILD_VERSION:-1.10.5}"
+    local arch=""
+    
+    # detect architecture
+    case "$(uname -m)" in
+        x86_64|amd64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            echo "unsupported architecture for OpenTofu: $(uname -m)" >&2
+            return 1
+            ;;
+    esac
+    
+    echo "installing OpenTofu ${version} for ${arch} architecture..."
+    
+    local tofu_url="https://github.com/opentofu/opentofu/releases/download/v${version}/tofu_${version}_linux_${arch}.zip"
+    local tofu_zip="/tmp/tofu.zip"
+    
+    # download with retry logic
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo "Download attempt $attempt of $max_attempts"
+        
+        if curl -fL --connect-timeout 30 --max-time 300 "$tofu_url" -o "$tofu_zip" 2>&1; then
+            echo "Download successful"
+            break
+        else
+            echo "Download attempt $attempt failed" >&2
+            if [ $attempt -eq $max_attempts ]; then
+                echo "failed to download OpenTofu after $max_attempts attempts" >&2
+                return 1
+            fi
+            echo "Retrying in 5 seconds..." >&2
+            sleep 5
+            attempt=$((attempt + 1))
+        fi
+    done
+    
+    # extract and install
+    if ! unzip -o "$tofu_zip" -d /tmp; then
+        echo "failed to extract OpenTofu" >&2
+        rm -f "$tofu_zip"
+        return 1
+    fi
+    
+    if ! mv /tmp/tofu /usr/local/bin/tofu; then
+        echo "failed to install OpenTofu" >&2
+        rm -f "$tofu_zip" /tmp/tofu
+        return 1
+    fi
+    
+    chmod +x /usr/local/bin/tofu
+    rm -f "$tofu_zip" /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+    
+    # verify installation
+    if /usr/local/bin/tofu version; then
+        echo "OpenTofu ${version} installed successfully"
+    else
+        echo "OpenTofu installation verification failed" >&2
+        return 1
+    fi
 }
 
 install_torero() {
@@ -132,14 +172,14 @@ install_torero() {
     echo "installing torero version ${TORERO_VERSION} for ${arch} architecture..."
     echo "downloading from: $torero_url"
     
-    # Download with retry logic
+    # download with retry logic
     local max_attempts=3
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
         echo "Download attempt $attempt of $max_attempts"
         
-        # Use curl with verbose error reporting
+        # use curl with verbose error reporting
         if curl -fL --connect-timeout 30 --max-time 300 "$torero_url" -o "$torero_tar" 2>&1; then
             echo "Download successful"
             echo "File size: $(stat -c%s "$torero_tar" 2>/dev/null || stat -f%z "$torero_tar" 2>/dev/null || echo 'unknown')"
@@ -172,7 +212,7 @@ install_torero() {
         echo "Warning: 'file' command not available, skipping file type check"
     fi
     
-    # Try to extract
+    # try to extract
     if ! tar -xzf "$torero_tar" -C /tmp 2>&1; then
         echo "failed to extract torero" >&2
         echo "Tar file details:" >&2
@@ -193,6 +233,104 @@ install_torero() {
     
     # verify install
     /usr/local/bin/torero version || { echo "torero installation verification failed" >&2; exit 1; }
+}
+
+# set up CLI execution capture wrapper
+setup_cli_capture() {
+    echo "setting up CLI execution capture wrapper..."
+    
+    # create wrapper script to capture CLI executions and send to UI database
+    cat > /usr/local/bin/torero-capture-wrapper.sh << 'EOF'
+#!/bin/bash
+# Wrapper script to capture torero CLI executions and send to UI database
+
+ORIGINAL_TORERO="/usr/local/bin/torero.real"
+
+# Check if this is a 'run service' command  
+if [[ "$1" == "run" && "$2" == "service" && "$#" -ge 4 ]]; then
+    SERVICE_TYPE="$3"
+    
+    # Handle different command structures
+    if [[ "$SERVICE_TYPE" == "opentofu-plan" && "$#" -ge 5 ]]; then
+        # OpenTofu commands: run service opentofu-plan apply/destroy service-name
+        SERVICE_NAME="$5"
+    else
+        # Regular commands: run service type service-name
+        SERVICE_NAME="$4"
+    fi
+    
+    # Debug logging to see what we captured
+    echo "DEBUG: All args: $@" >> /tmp/torero-wrapper-debug.log
+    echo "DEBUG: SERVICE_TYPE='$SERVICE_TYPE', SERVICE_NAME='$SERVICE_NAME'" >> /tmp/torero-wrapper-debug.log
+    
+    # Capture execution with timing
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    START_EPOCH=$(date +%s.%N)
+    
+    # Run the original command and capture all output
+    OUTPUT_FILE=$(mktemp)
+    ERROR_FILE=$(mktemp)
+    
+    # Run command and capture stdout/stderr separately
+    $ORIGINAL_TORERO "$@" > "$OUTPUT_FILE" 2> "$ERROR_FILE"
+    RETURN_CODE=$?
+    
+    END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    END_EPOCH=$(date +%s.%N)
+    ELAPSED=$(echo "scale=6; $END_EPOCH - $START_EPOCH" | bc -l)
+    
+    STDOUT_CONTENT=$(cat "$OUTPUT_FILE")
+    STDERR_CONTENT=$(cat "$ERROR_FILE")
+    
+    # Send execution data to UI database (async, non-blocking)
+    (
+        curl -X POST http://localhost:8001/api/record-execution/ \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"service_name\": \"$SERVICE_NAME\",
+                \"service_type\": \"$SERVICE_TYPE\",
+                \"execution_data\": {
+                    \"return_code\": $RETURN_CODE,
+                    \"stdout\": $(echo "$STDOUT_CONTENT" | jq -R -s .),
+                    \"stderr\": $(echo "$STDERR_CONTENT" | jq -R -s .),
+                    \"start_time\": \"$START_TIME\",
+                    \"end_time\": \"$END_TIME\",
+                    \"elapsed_time\": $ELAPSED
+                }
+            }" >/dev/null 2>&1
+    ) &
+    
+    # Clean up temp files
+    rm -f "$OUTPUT_FILE" "$ERROR_FILE"
+    
+    # Display original output to user (exactly as torero would)
+    echo "$STDOUT_CONTENT"
+    if [[ -n "$STDERR_CONTENT" ]]; then
+        echo "$STDERR_CONTENT" >&2
+    fi
+    
+    exit $RETURN_CODE
+else
+    # For non-execution commands, just pass through
+    exec $ORIGINAL_TORERO "$@"
+fi
+EOF
+
+    # install the wrapper if torero exists
+    if [[ -f "/usr/local/bin/torero" ]]; then
+        # Backup original if not already done
+        if [[ ! -f "/usr/local/bin/torero.real" ]]; then
+            cp /usr/local/bin/torero /usr/local/bin/torero.real
+        fi
+        
+        # install wrapper
+        chmod +x /usr/local/bin/torero-capture-wrapper.sh
+        cp /usr/local/bin/torero-capture-wrapper.sh /usr/local/bin/torero
+        
+        echo "CLI execution capture wrapper installed - all CLI runs will be recorded in UI database"
+    else
+        echo "torero binary not found, skipping CLI capture setup"
+    fi
 }
 
 # set up python environment
@@ -223,7 +361,6 @@ setup_python() {
     pip3 --version || { echo "pip verification failed" >&2; return 1; }
 }
 
-
 cleanup() {
     echo "cleaning up..."
     apt-get clean
@@ -235,16 +372,23 @@ cleanup() {
 create_manifest() {
     echo "creating version manifest..."
     mkdir -p /etc
+    
+    local opentofu_version="not_installed"
+    if command -v tofu &> /dev/null; then
+        opentofu_version=$(tofu version | grep -oP "v\K[0-9]+\.[0-9]+\.[0-9]+" | head -1 || echo "unknown")
+    fi
+    
     cat > /etc/torero-image-manifest.json << EOF
 {
   "build_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "architecture": "$(uname -m)",
   "tools": {
     "torero": "${TORERO_VERSION}",
+    "opentofu": "${opentofu_version}",
     "python": "$(python3 --version 2>&1)"
   },
   "config": {
-    "ssh_enabled": "${ENABLE_SSH_ADMIN:-false}"
+    "ssh_enabled": "runtime_only"
   }
 }
 EOF
@@ -253,7 +397,7 @@ EOF
 main() {
     check_version
     
-    # Verify Python is available from base image
+    # verify Python is available from base image
     if ! command -v python3 >/dev/null 2>&1; then
         echo "ERROR: Python3 not found in base image" >&2
         echo "Current PATH: $PATH" >&2
@@ -266,16 +410,9 @@ main() {
     configure_locale
     setup_admin_user
     setup_python
-    
-    # only configure ssh if enabled
-    if [ "${ENABLE_SSH_ADMIN:-false}" = "true" ]; then
-        configure_ssh
-        echo "SSH admin access enabled"
-    else
-        echo "SSH admin access disabled"
-    fi
-    
     install_torero
+    setup_cli_capture
+    install_opentofu || echo "WARNING: OpenTofu installation failed, will retry at runtime"
     create_manifest
     cleanup
     echo "configuration complete!"

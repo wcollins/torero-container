@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "torero": {
+      "command": "/path/to/torero-mcp/.venv/bin/python",
+      "args": [
+        "-m",
+        "torero_mcp.cli",
+        "run",
+        "--transport",
+        "stdio",
+        "--config",
+        "/path/to/torero-mcp/config.yaml"
+      ],
+      "env": {
+        "TORERO_CONFIG_PATH": "/path/to/torero-mcp/config.yaml"
+      }
+    }
+  }
+}
