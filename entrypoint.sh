@@ -182,6 +182,106 @@ EOF
     fi
 }
 
+setup_cli_capture() {
+    echo "setting up CLI execution capture wrapper..."
+    
+    # only set up if UI is enabled (since the wrapper sends data to UI)
+    if [[ "${ENABLE_UI:-false}" != "true" ]]; then
+        echo "skipping CLI capture setup as ENABLE_UI is not set to true"
+        return 0
+    fi
+    
+    # backup original torero binary if not already done
+    if [ ! -f "/usr/local/bin/torero.real" ]; then
+        cp /usr/local/bin/torero /usr/local/bin/torero.real
+    fi
+    
+    # create wrapper script to capture CLI executions and send to UI database
+    cat > /usr/local/bin/torero-capture-wrapper.sh << 'EOF'
+#!/bin/bash
+# Wrapper script to capture torero CLI executions and send to UI database
+
+ORIGINAL_TORERO="/usr/local/bin/torero.real"
+
+# Check if this is a 'run service' command  
+if [[ "$1" == "run" && "$2" == "service" && "$#" -ge 4 ]]; then
+    SERVICE_TYPE="$3"
+    
+    # Handle different command structures
+    if [[ "$SERVICE_TYPE" == "opentofu-plan" && "$#" -ge 5 ]]; then
+        # OpenTofu commands: run service opentofu-plan apply/destroy service-name
+        SERVICE_NAME="$5"
+    else
+        # Regular commands: run service type service-name
+        SERVICE_NAME="$4"
+    fi
+    
+    # Debug logging to see what we captured
+    echo "DEBUG: All args: $@" >> /tmp/torero-wrapper-debug.log
+    echo "DEBUG: SERVICE_TYPE='$SERVICE_TYPE', SERVICE_NAME='$SERVICE_NAME'" >> /tmp/torero-wrapper-debug.log
+    
+    # Capture execution with timing
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    START_EPOCH=$(date +%s.%N)
+    
+    # Run the original command and capture all output
+    OUTPUT_FILE=$(mktemp)
+    ERROR_FILE=$(mktemp)
+    
+    # Run command and capture stdout/stderr separately
+    $ORIGINAL_TORERO "$@" > "$OUTPUT_FILE" 2> "$ERROR_FILE"
+    RETURN_CODE=$?
+    
+    END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    END_EPOCH=$(date +%s.%N)
+    ELAPSED=$(echo "scale=6; $END_EPOCH - $START_EPOCH" | bc -l)
+    
+    STDOUT_CONTENT=$(cat "$OUTPUT_FILE")
+    STDERR_CONTENT=$(cat "$ERROR_FILE")
+    
+    # Send execution data to UI database (async, non-blocking)
+    (
+        curl -X POST http://localhost:8001/api/record-execution/ \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"service_name\": \"$SERVICE_NAME\",
+                \"service_type\": \"$SERVICE_TYPE\",
+                \"execution_data\": {
+                    \"return_code\": $RETURN_CODE,
+                    \"stdout\": $(echo "$STDOUT_CONTENT" | jq -R -s .),
+                    \"stderr\": $(echo "$STDERR_CONTENT" | jq -R -s .),
+                    \"start_time\": \"$START_TIME\",
+                    \"end_time\": \"$END_TIME\",
+                    \"elapsed_time\": $ELAPSED
+                }
+            }" >/dev/null 2>&1
+    ) &
+    
+    # Clean up temp files
+    rm -f "$OUTPUT_FILE" "$ERROR_FILE"
+    
+    # Display original output to user (exactly as torero would)
+    echo "$STDOUT_CONTENT"
+    if [[ -n "$STDERR_CONTENT" ]]; then
+        echo "$STDERR_CONTENT" >&2
+    fi
+    
+    exit $RETURN_CODE
+else
+    # For non-execution commands, just pass through
+    exec $ORIGINAL_TORERO "$@"
+fi
+EOF
+
+    # make wrapper script executable
+    chmod +x /usr/local/bin/torero-capture-wrapper.sh
+    
+    # replace torero with wrapper
+    cp /usr/local/bin/torero-capture-wrapper.sh /usr/local/bin/torero
+    
+    echo "CLI execution capture wrapper installed successfully"
+}
+
 setup_torero_api() {
     if [[ "${ENABLE_API:-false}" != "true" ]]; then
         echo "skipping torero-api setup as ENABLE_API is not set to true"
@@ -191,13 +291,32 @@ setup_torero_api() {
     local api_port="${API_PORT:-8000}"
     echo "setting up torero-api on port ${api_port}..."
 
-    # verify torero-api is available (bundled in container)
-    if [ ! -d "/opt/torero-api" ]; then
-        echo "error: torero-api not found in /opt/torero-api" >&2
-        return 1
+    # install uv
+    if ! command -v uv &> /dev/null; then
+        echo "installing uv package manager..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh || {
+            echo "error: failed to install uv" >&2
+            return 1
+        }
+        # add uv to PATH
+        export PATH="$HOME/.local/bin:$PATH"
     fi
-    
-    echo "using bundled torero-api from /opt/torero-api (pre-installed at build time)"
+
+    # clone and install torero-api
+    if [ ! -d "/opt/torero-api" ]; then
+        echo "cloning torero-api repository..."
+        git clone https://github.com/torerodev/torero-api.git /opt/torero-api || {
+            echo "error: failed to clone torero-api repository" >&2
+            return 1
+        }
+    fi
+
+    cd /opt/torero-api
+    echo "installing torero-api with uv..."
+    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
+        echo "error: failed to install torero-api" >&2
+        return 1
+    }
 
     # ensure db maps to admin user
     if [ ! -d "/home/admin/.torero.d" ]; then
@@ -216,12 +335,12 @@ setup_torero_api() {
 
     # run as admin user
     su - admin -c "nohup /usr/local/bin/torero-api --daemon --host 0.0.0.0 --port ${api_port} --log-file /home/admin/.torero-api.log > /dev/null 2>&1 &"
-    
+
     # success?
     sleep 2
     if pgrep -f "torero-api" > /dev/null; then
         echo "torero-api daemon started successfully on port ${api_port}"
-        
+
         # update manifest
         update_manifest ".services.torero_api = {\"enabled\": true, \"port\": ${api_port}}"
     else
@@ -259,13 +378,31 @@ setup_torero_mcp() {
 
     echo "setting up torero-mcp with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
 
-    # verify torero-mcp is available (bundled in container)
-    if [ ! -d "/opt/torero-mcp" ]; then
-        echo "error: torero-mcp not found in /opt/torero-mcp" >&2
-        return 1
+    # ensure uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "installing uv package manager..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh || {
+            echo "error: failed to install uv" >&2
+            return 1
+        }
+        export PATH="$HOME/.local/bin:$PATH"
     fi
-    
-    echo "using bundled torero-mcp from /opt/torero-mcp (pre-installed at build time)"
+
+    # clone and install torero-mcp
+    if [ ! -d "/opt/torero-mcp" ]; then
+        echo "cloning torero-mcp repository..."
+        git clone https://github.com/torerodev/torero-mcp.git /opt/torero-mcp || {
+            echo "error: failed to clone torero-mcp repository" >&2
+            return 1
+        }
+    fi
+
+    cd /opt/torero-mcp
+    echo "installing torero-mcp with uv..."
+    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
+        echo "error: failed to install torero-mcp" >&2
+        return 1
+    }
 
     # create log file
     touch "${mcp_log_file}"
@@ -284,7 +421,7 @@ setup_torero_mcp() {
 
     # start torero-mcp daemon
     echo "starting torero-mcp daemon with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
-    
+
     # run as admin user with environment variables
     su - admin -c "export TORERO_MCP_TRANSPORT_TYPE='${mcp_transport}' && \
                    export TORERO_MCP_TRANSPORT_HOST='${mcp_host}' && \
@@ -296,12 +433,12 @@ setup_torero_mcp() {
                    export TORERO_MCP_PID_FILE='${mcp_pid_file}' && \
                    export TORERO_MCP_LOG_FILE='${mcp_log_file}' && \
                    nohup /usr/local/bin/torero-mcp run --transport ${mcp_transport} --host ${mcp_host} --port ${mcp_port} > /dev/null 2>&1 &"
-    
+
     # verify startup
     sleep 3
     if [ -f "${mcp_pid_file}" ] && kill -0 $(cat "${mcp_pid_file}") 2>/dev/null; then
         echo "torero-mcp daemon started successfully on ${mcp_host}:${mcp_port}"
-        
+
         # update manifest
         update_manifest ".services.torero_mcp = {\"enabled\": true, \"transport\": \"${mcp_transport}\", \"host\": \"${mcp_host}\", \"port\": ${mcp_port}}"
     else
@@ -401,16 +538,32 @@ setup_torero_ui() {
 
     echo "setting up torero-ui on port ${ui_port}..."
 
-    # verify torero-ui is available (bundled in container)
-    if [ ! -d "/opt/torero-ui" ]; then
-        echo "error: torero-ui not found in /opt/torero-ui" >&2
-        return 1
+    # ensure uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "installing uv package manager..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh || {
+            echo "error: failed to install uv" >&2
+            return 1
+        }
+        export PATH="$HOME/.local/bin:$PATH"
     fi
-    
-    echo "using bundled torero-ui from /opt/torero-ui (pre-installed at build time)"
+
+    # clone and install torero-ui
+    if [ ! -d "/opt/torero-ui" ]; then
+        echo "cloning torero-ui repository..."
+        git clone https://github.com/torerodev/torero-ui.git /opt/torero-ui || {
+            echo "error: failed to clone torero-ui repository" >&2
+            return 1
+        }
+    fi
 
     cd /opt/torero-ui
-    
+    echo "installing torero-ui with uv..."
+    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
+        echo "error: failed to install torero-ui" >&2
+        return 1
+    }
+
     # set environment variables for runtime
     export DJANGO_SETTINGS_MODULE=torero_ui.settings
     export TORERO_API_BASE_URL="${api_base_url}"
@@ -489,4 +642,5 @@ verify_opentofu || echo "OpenTofu verification failed, continuing without it"
 setup_torero_api || echo "torero-api setup failed, continuing without it"
 setup_torero_mcp || echo "torero-mcp setup failed, continuing without it"
 setup_torero_ui || echo "torero-ui setup failed, continuing without it"
+setup_cli_capture || echo "CLI capture setup failed, continuing without it"
 exec "$@"
