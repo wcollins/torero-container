@@ -41,12 +41,23 @@ ENV TORERO_LOG_LEVEL=INFO
 ENV TORERO_MCP_PID_FILE=/tmp/torero-mcp.pid
 ENV TORERO_MCP_LOG_FILE=/home/admin/.torero-mcp.log
 
+# api server is disabled by default
+ENV ENABLE_API=false
+ENV API_PORT=8000
+
 # reduce docker image size
 ENV DEBIAN_FRONTEND=noninteractive
 
 # copy scripts to image
 COPY configure.sh /configure.sh
 COPY entrypoint.sh /entrypoint.sh
+
+# copy torero projects to image
+COPY opt/torero-api /opt/torero-api
+COPY opt/torero-mcp /opt/torero-mcp
+
+# install Python dependencies at build time
+RUN pip install --no-cache-dir -e /opt/torero-api /opt/torero-mcp
 
 # Install curl and unzip for runtime OpenTofu installation
 RUN apt-get update && apt-get install -y curl unzip && \
@@ -58,6 +69,9 @@ RUN chmod +x /configure.sh && /configure.sh && \
 
 # expose ssh port (only used if SSH is enabled)
 EXPOSE 22
+
+# expose API port (only used if API is enabled)
+EXPOSE 8000
 
 # expose MCP port (only used if MCP is enabled)
 EXPOSE 8080

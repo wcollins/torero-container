@@ -14,7 +14,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -eo pipefail
+set -euo pipefail
+
+# cleanup function for temporary files
+cleanup() {
+    rm -f /tmp/tofu.zip /tmp/*.exp /tmp/manifest.json /tmp/tofu /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
+}
+trap cleanup EXIT
+
+# function to update manifest file
+update_manifest() {
+    local json_update="$1"
+    if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
+        jq "$json_update" /etc/torero-image-manifest.json > /tmp/manifest.json
+        mv /tmp/manifest.json /etc/torero-image-manifest.json
+    fi
+}
+
+# function to wait for API to be ready
+wait_for_api() {
+    local api_port="${1:-8000}"
+    local max_attempts="${2:-30}"
+    local attempt=0
+    
+    echo "waiting for torero-api to be ready on port ${api_port}..."
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -s -o /dev/null -w "%{http_code}" "http://localhost:${api_port}/health" | grep -q "200"; then
+            echo "torero-api is ready"
+            return 0
+        fi
+        echo "waiting for torero-api... (attempt $((attempt+1))/${max_attempts})"
+        sleep 2
+        attempt=$((attempt+1))
+    done
+    
+    echo "warning: torero-api not reachable after ${max_attempts} attempts" >&2
+    return 1
+}
 
 install_opentofu_version() {
     local target_version="$1"
@@ -51,7 +87,6 @@ install_opentofu_version() {
     fi
     
     chmod +x /usr/local/bin/tofu
-    rm -f /tmp/tofu.zip /tmp/CHANGELOG.md /tmp/LICENSE /tmp/README.md
     
     echo "OpenTofu ${target_version} installed successfully"
     return 0
@@ -82,15 +117,8 @@ verify_opentofu() {
             fi
         fi
         
-        # update manifest if present
-        if [ -f "/etc/torero-image-manifest.json" ]; then
-            if command -v jq &> /dev/null; then
-                jq ".tools.opentofu = \"${installed_version}\"" /etc/torero-image-manifest.json > /tmp/manifest.json
-                mv /tmp/manifest.json /etc/torero-image-manifest.json
-            else
-                echo "jq not found, skipping manifest update"
-            fi
-        fi
+        # update manifest
+        update_manifest ".tools.opentofu = \"${installed_version}\""
         return 0
     else
         # if no OpenTofu found, install the requested or default version
@@ -163,32 +191,13 @@ setup_torero_api() {
     local api_port="${API_PORT:-8000}"
     echo "setting up torero-api on port ${api_port}..."
 
-    # install uv
-    if ! command -v uv &> /dev/null; then
-        echo "installing uv package manager..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh || {
-            echo "error: failed to install uv" >&2
-            return 1
-        }
-        # add uv to PATH
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-
-    # clone and install torero-api
+    # verify torero-api is available (bundled in container)
     if [ ! -d "/opt/torero-api" ]; then
-        echo "cloning torero-api repository..."
-        git clone https://github.com/torerodev/torero-api.git /opt/torero-api || {
-            echo "error: failed to clone torero-api repository" >&2
-            return 1
-        }
-    fi
-
-    cd /opt/torero-api
-    echo "installing torero-api with uv..."
-    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
-        echo "error: failed to install torero-api" >&2
+        echo "error: torero-api not found in /opt/torero-api" >&2
         return 1
-    }
+    fi
+    
+    echo "using bundled torero-api from /opt/torero-api (pre-installed at build time)"
 
     # ensure db maps to admin user
     if [ ! -d "/home/admin/.torero.d" ]; then
@@ -213,11 +222,8 @@ setup_torero_api() {
     if pgrep -f "torero-api" > /dev/null; then
         echo "torero-api daemon started successfully on port ${api_port}"
         
-        # update manifest if available
-        if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
-            jq ".services.torero_api = {\"enabled\": true, \"port\": ${api_port}}" /etc/torero-image-manifest.json > /tmp/manifest.json
-            mv /tmp/manifest.json /etc/torero-image-manifest.json
-        fi
+        # update manifest
+        update_manifest ".services.torero_api = {\"enabled\": true, \"port\": ${api_port}}"
     else
         echo "warning: torero-api daemon failed to start" >&2
         return 1
@@ -235,22 +241,7 @@ setup_torero_mcp() {
     # ensure torero-api is running first
     if [[ "${ENABLE_API}" == "true" ]]; then
         local api_port="${API_PORT:-8000}"
-        local max_attempts=30
-        local attempt=0
-        
-        echo "waiting for torero-api to be ready on port ${api_port}..."
-        while [ $attempt -lt $max_attempts ]; do
-            if curl -s -o /dev/null -w "%{http_code}" "http://localhost:${api_port}/health" | grep -q "200"; then
-                echo "torero-api is ready"
-                break
-            fi
-            echo "waiting for torero-api... (attempt $((attempt+1))/${max_attempts})"
-            sleep 2
-            attempt=$((attempt+1))
-        done
-        
-        if [ $attempt -eq $max_attempts ]; then
-            echo "warning: torero-api not reachable after ${max_attempts} attempts" >&2
+        if ! wait_for_api "${api_port}" 30; then
             return 1
         fi
     fi
@@ -268,31 +259,13 @@ setup_torero_mcp() {
 
     echo "setting up torero-mcp with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
 
-    # ensure uv is available
-    if ! command -v uv &> /dev/null; then
-        echo "installing uv package manager..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh || {
-            echo "error: failed to install uv" >&2
-            return 1
-        }
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-
-    # clone and install torero-mcp
+    # verify torero-mcp is available (bundled in container)
     if [ ! -d "/opt/torero-mcp" ]; then
-        echo "cloning torero-mcp repository..."
-        git clone https://github.com/torerodev/torero-mcp.git /opt/torero-mcp || {
-            echo "error: failed to clone torero-mcp repository" >&2
-            return 1
-        }
-    fi
-
-    cd /opt/torero-mcp
-    echo "installing torero-mcp with uv..."
-    PATH="$HOME/.local/bin:$PATH" uv pip install --system -e . || {
-        echo "error: failed to install torero-mcp" >&2
+        echo "error: torero-mcp not found in /opt/torero-mcp" >&2
         return 1
-    }
+    fi
+    
+    echo "using bundled torero-mcp from /opt/torero-mcp (pre-installed at build time)"
 
     # create log file
     touch "${mcp_log_file}"
@@ -329,11 +302,8 @@ setup_torero_mcp() {
     if [ -f "${mcp_pid_file}" ] && kill -0 $(cat "${mcp_pid_file}") 2>/dev/null; then
         echo "torero-mcp daemon started successfully on ${mcp_host}:${mcp_port}"
         
-        # update manifest if available
-        if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
-            jq ".services.torero_mcp = {\"enabled\": true, \"transport\": \"${mcp_transport}\", \"host\": \"${mcp_host}\", \"port\": ${mcp_port}}" /etc/torero-image-manifest.json > /tmp/manifest.json
-            mv /tmp/manifest.json /etc/torero-image-manifest.json
-        fi
+        # update manifest
+        update_manifest ".services.torero_mcp = {\"enabled\": true, \"transport\": \"${mcp_transport}\", \"host\": \"${mcp_host}\", \"port\": ${mcp_port}}"
     else
         echo "warning: torero-mcp daemon failed to start" >&2
         return 1
@@ -342,50 +312,175 @@ setup_torero_mcp() {
     return 0
 }
 
-# check if ssh access is needed but not configured at build time
+# Setup SSH at runtime (SSH is no longer configured at build time)
 setup_ssh_runtime() {
     if [ "${ENABLE_SSH_ADMIN}" = "true" ]; then
-
-        # check if ssh is already set up
-        if [ ! -f "/etc/ssh/sshd_config" ] || ! grep -q "PermitRootLogin" /etc/ssh/sshd_config; then
-            echo "SSH was not enabled at build time but requested at runtime. Installing SSH..."
+        echo "Setting up SSH admin access at runtime..."
+        
+        # Install SSH packages if not present
+        if ! command -v sshd &> /dev/null; then
+            echo "Installing SSH packages..."
             apt-get update -y
             apt-get install -y --no-install-recommends openssh-server sudo
-            
-            # set up admin user
-            if ! id admin &>/dev/null; then
-                useradd -m -s /bin/bash admin
-            fi
-            echo "admin:admin" | chpasswd
+        fi
+        
+        # Always ensure /var/run/sshd exists (required for sshd to start)
+        mkdir -p /var/run/sshd
+        
+        # set up admin user if doesn't exist
+        if ! id admin &>/dev/null; then
+            useradd -m -s /bin/bash admin
+        fi
+        
+        # Always set/reset the password
+        echo "admin:admin" | chpasswd
+        
+        # Ensure sudo permissions
+        if [ ! -f "/etc/sudoers.d/admin" ]; then
             echo "admin ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/admin
             chmod 0440 /etc/sudoers.d/admin
-            
-            # configure ssh
-            mkdir -p /var/run/sshd
+        fi
+        
+        # Configure SSH if not already configured
+        if [ ! -f "/etc/ssh/sshd_config" ] || ! grep -q "PermitRootLogin" /etc/ssh/sshd_config; then
+            echo "Configuring SSH settings..."
             echo "PermitRootLogin no" >> /etc/ssh/sshd_config
             echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
             echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
             echo "PermitEmptyPasswords no" >> /etc/ssh/sshd_config
             echo "LoginGraceTime 120" >> /etc/ssh/sshd_config
-            
-            mkdir -p /home/admin/.ssh
-            chmod 700 /home/admin/.ssh
-            touch /home/admin/.ssh/authorized_keys
-            chmod 600 /home/admin/.ssh/authorized_keys
-            chown -R admin:admin /home/admin/.ssh
-            
+        fi
+        
+        # Set up SSH keys directory
+        mkdir -p /home/admin/.ssh
+        chmod 700 /home/admin/.ssh
+        touch /home/admin/.ssh/authorized_keys
+        chmod 600 /home/admin/.ssh/authorized_keys
+        chown -R admin:admin /home/admin/.ssh
+        
+        # Generate SSH host keys if they don't exist
+        if [ ! -f "/etc/ssh/ssh_host_rsa_key" ]; then
             ssh-keygen -A
-            
+        fi
+        
+        # Start SSH daemon
+        echo "Starting SSH daemon..."
+        /usr/sbin/sshd
+        
+        # Verify SSH is running
+        if pgrep -x sshd > /dev/null; then
+            echo "SSH daemon started successfully"
             # update manifest
-            if [ -f "/etc/torero-image-manifest.json" ] && command -v jq &> /dev/null; then
-                jq '.config.ssh_enabled = "true"' /etc/torero-image-manifest.json > /tmp/manifest.json
-                mv /tmp/manifest.json /etc/torero-image-manifest.json
-            fi
-            
-            echo "SSH access enabled at runtime"
+            update_manifest '.config.ssh_enabled = "true"'
+        else
+            echo "WARNING: Failed to start SSH daemon" >&2
         fi
     fi
 }
+
+setup_torero_ui() {
+    if [[ "${ENABLE_UI}" != "true" ]]; then
+        echo "skipping torero-ui setup as ENABLE_UI is not set to true"
+        return 0
+    fi
+
+    # ensure torero-api is running first
+    if [[ "${ENABLE_API}" == "true" ]]; then
+        local api_port="${API_PORT:-8000}"
+        if ! wait_for_api "${api_port}" 30; then
+            return 1
+        fi
+    fi
+
+    # set default UI configuration
+    local ui_port="${UI_PORT:-8001}"
+    local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
+    local refresh_interval="${UI_REFRESH_INTERVAL:-30}"
+    local ui_log_file="${TORERO_UI_LOG_FILE:-/home/admin/.torero-ui.log}"
+    local ui_pid_file="${TORERO_UI_PID_FILE:-/tmp/torero-ui.pid}"
+
+    echo "setting up torero-ui on port ${ui_port}..."
+
+    # verify torero-ui is available (bundled in container)
+    if [ ! -d "/opt/torero-ui" ]; then
+        echo "error: torero-ui not found in /opt/torero-ui" >&2
+        return 1
+    fi
+    
+    echo "using bundled torero-ui from /opt/torero-ui (pre-installed at build time)"
+
+    cd /opt/torero-ui
+    
+    # set environment variables for runtime
+    export DJANGO_SETTINGS_MODULE=torero_ui.settings
+    export TORERO_API_BASE_URL="${api_base_url}"
+    export UI_REFRESH_INTERVAL="${refresh_interval}"
+    export DEBUG=False
+
+    # create log file
+    touch "${ui_log_file}"
+    chown admin:admin "${ui_log_file}"
+
+    # export environment variables for torero-ui
+    export TORERO_API_BASE_URL="${api_base_url}"
+    export UI_REFRESH_INTERVAL="${refresh_interval}"
+    export TORERO_UI_PORT="${ui_port}"
+    export TORERO_UI_LOG_FILE="${ui_log_file}"
+    export TORERO_UI_PID_FILE="${ui_pid_file}"
+    export DEBUG=False
+
+    # ensure data directory exists and run migrations for persistent database
+    mkdir -p /home/admin/data
+    # Fix ownership of mounted data directory (handles bind mounts from host)
+    chown -R admin:admin /home/admin/data
+    
+    # run database migrations for the persistent database (without build mode)
+    echo "running database migrations for persistent storage..."
+    su - admin -c "export DJANGO_SETTINGS_MODULE='torero_ui.settings' && \
+                   export TORERO_API_BASE_URL='${api_base_url}' && \
+                   export UI_REFRESH_INTERVAL='${refresh_interval}' && \
+                   export DEBUG='False' && \
+                   cd /opt/torero-ui && \
+                   python torero_ui/manage.py migrate"
+    
+    # start torero-ui daemon
+    echo "starting torero-ui daemon on port ${ui_port}..."
+    
+    # run as admin user with environment variables
+    su - admin -c "export DJANGO_SETTINGS_MODULE='torero_ui.settings' && \
+                   export TORERO_API_BASE_URL='${api_base_url}' && \
+                   export UI_REFRESH_INTERVAL='${refresh_interval}' && \
+                   export DEBUG='False' && \
+                   cd /opt/torero-ui && \
+                   nohup python torero_ui/manage.py runserver 0.0.0.0:${ui_port} --noreload > ${ui_log_file} 2>&1 &"
+    
+    # get the PID and save it
+    sleep 2
+    UI_PID=$(pgrep -f "manage.py runserver" | head -1)
+    if [ -n "$UI_PID" ]; then
+        echo "$UI_PID" > "${ui_pid_file}"
+        chown admin:admin "${ui_pid_file}"
+    fi
+    
+    # verify startup
+    sleep 3
+    if [ -f "${ui_pid_file}" ] && kill -0 $(cat "${ui_pid_file}") 2>/dev/null; then
+        echo "torero-ui daemon started successfully on port ${ui_port}"
+        echo "dashboard available at: http://localhost:${ui_port}"
+        
+        # update manifest
+        update_manifest ".services.torero_ui = {\"enabled\": true, \"port\": ${ui_port}, \"url\": \"http://localhost:${ui_port}\"}"
+    else
+        echo "warning: torero-ui daemon failed to start" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+
+# unset build mode for runtime
+unset CONTAINER_BUILD_MODE
 
 configure_dns
 setup_ssh_runtime
@@ -393,4 +488,5 @@ handle_torero_eula
 verify_opentofu || echo "OpenTofu verification failed, continuing without it"
 setup_torero_api || echo "torero-api setup failed, continuing without it"
 setup_torero_mcp || echo "torero-mcp setup failed, continuing without it"
+setup_torero_ui || echo "torero-ui setup failed, continuing without it"
 exec "$@"
