@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}torero Opsboard{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <img src="{% static 'img/torero.svg' %}" alt="torero" class="logo-svg">
+            <span class="logo-text">torero</span>
+        </div>
+        <div class="dashboard-title">{% block page_title %}Opsboard{% endblock %}</div>
+        <div class="refresh-indicator" id="refresh-indicator">
+            <span id="refresh-status">Auto-refresh enabled</span>
+            <span id="last-update"></span>
+        </div>
+    </div>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- execution detail modal -->
+    <div id="execution-modal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeExecutionModal()">&times;</button>
+            <div id="execution-detail-content">
+                <!-- execution details loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    {% block extra_js %}{% endblock %}
+    <script src="{% static 'js/dashboard.js' %}"></script>
+</body>
+</html>

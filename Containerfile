@@ -45,6 +45,13 @@ ENV TORERO_MCP_LOG_FILE=/home/admin/.torero-mcp.log
 ENV ENABLE_API=false
 ENV API_PORT=8000
 
+# ui server is disabled by default
+ENV ENABLE_UI=false
+ENV UI_PORT=8001
+ENV UI_REFRESH_INTERVAL=30
+ENV TORERO_UI_LOG_FILE=/home/admin/.torero-ui.log
+ENV TORERO_UI_PID_FILE=/tmp/torero-ui.pid
+
 # reduce docker image size
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -54,10 +61,18 @@ COPY entrypoint.sh /entrypoint.sh
 
 # copy torero projects to image
 COPY opt/torero-api /opt/torero-api
+COPY opt/torero-ui /opt/torero-ui
 COPY opt/torero-mcp /opt/torero-mcp
 
 # install Python dependencies at build time
-RUN pip install --no-cache-dir -e /opt/torero-api /opt/torero-mcp
+RUN pip install --no-cache-dir -e /opt/torero-api /opt/torero-ui /opt/torero-mcp
+
+# set up Django static files at build time
+ENV DJANGO_SETTINGS_MODULE=torero_ui.settings
+WORKDIR /opt/torero-ui
+RUN CONTAINER_BUILD_MODE=true python torero_ui/manage.py migrate && \
+    CONTAINER_BUILD_MODE=true python torero_ui/manage.py collectstatic --noinput
+WORKDIR /
 
 # Install curl and unzip for runtime OpenTofu installation
 RUN apt-get update && apt-get install -y curl unzip && \
@@ -72,6 +87,9 @@ EXPOSE 22
 
 # expose API port (only used if API is enabled)
 EXPOSE 8000
+
+# expose UI port (only used if UI is enabled)
+EXPOSE 8001
 
 # expose MCP port (only used if MCP is enabled)
 EXPOSE 8080
