@@ -182,6 +182,208 @@ EOF
     fi
 }
 
+setup_cli_capture() {
+    echo "setting up CLI execution capture wrapper..."
+    
+    # only set up if UI is enabled (since the wrapper sends data to UI)
+    if [[ "${ENABLE_UI:-false}" != "true" ]]; then
+        echo "skipping CLI capture setup as ENABLE_UI is not set to true"
+        return 0
+    fi
+    
+    # backup original torero binary if not already done
+    if [ ! -f "/usr/local/bin/torero.real" ]; then
+        cp /usr/local/bin/torero /usr/local/bin/torero.real
+    fi
+    
+    # create wrapper script to capture CLI executions and send to UI database
+    cat > /usr/local/bin/torero-capture-wrapper.sh << 'EOF'
+#!/bin/bash
+# Wrapper script to capture torero CLI executions and send to UI database
+
+ORIGINAL_TORERO="/usr/local/bin/torero.real"
+
+# Check if this is a 'run service' command  
+if [[ "$1" == "run" && "$2" == "service" && "$#" -ge 4 ]]; then
+    SERVICE_TYPE="$3"
+    
+    # Handle different command structures
+    if [[ "$SERVICE_TYPE" == "opentofu-plan" && "$#" -ge 5 ]]; then
+        # OpenTofu commands: run service opentofu-plan apply/destroy service-name
+        SERVICE_NAME="$5"
+    else
+        # Regular commands: run service type service-name
+        SERVICE_NAME="$4"
+    fi
+    
+    # Debug logging to see what we captured
+    echo "DEBUG: All args: $@" >> /tmp/torero-wrapper-debug.log
+    echo "DEBUG: SERVICE_TYPE='$SERVICE_TYPE', SERVICE_NAME='$SERVICE_NAME'" >> /tmp/torero-wrapper-debug.log
+    
+    # Capture execution with timing
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    START_EPOCH=$(date +%s.%N)
+    
+    # Run the original command and capture all output
+    OUTPUT_FILE=$(mktemp)
+    ERROR_FILE=$(mktemp)
+    
+    # Run command and capture stdout/stderr separately
+    $ORIGINAL_TORERO "$@" > "$OUTPUT_FILE" 2> "$ERROR_FILE"
+    RETURN_CODE=$?
+    
+    END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    END_EPOCH=$(date +%s.%N)
+    ELAPSED=$(echo "scale=6; $END_EPOCH - $START_EPOCH" | bc -l)
+    
+    STDOUT_CONTENT=$(cat "$OUTPUT_FILE")
+    STDERR_CONTENT=$(cat "$ERROR_FILE")
+    
+    # Send execution data to UI database (async, non-blocking)
+    (
+        curl -X POST http://localhost:8001/api/record-execution/ \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"service_name\": \"$SERVICE_NAME\",
+                \"service_type\": \"$SERVICE_TYPE\",
+                \"execution_data\": {
+                    \"return_code\": $RETURN_CODE,
+                    \"stdout\": $(echo "$STDOUT_CONTENT" | jq -R -s .),
+                    \"stderr\": $(echo "$STDERR_CONTENT" | jq -R -s .),
+                    \"start_time\": \"$START_TIME\",
+                    \"end_time\": \"$END_TIME\",
+                    \"elapsed_time\": $ELAPSED
+                }
+            }" >/dev/null 2>&1
+    ) &
+    
+    # Clean up temp files
+    rm -f "$OUTPUT_FILE" "$ERROR_FILE"
+    
+    # Display original output to user (exactly as torero would)
+    echo "$STDOUT_CONTENT"
+    if [[ -n "$STDERR_CONTENT" ]]; then
+        echo "$STDERR_CONTENT" >&2
+    fi
+    
+    exit $RETURN_CODE
+else
+    # For non-execution commands, just pass through
+    exec $ORIGINAL_TORERO "$@"
+fi
+EOF
+
+    # make wrapper script executable
+    chmod +x /usr/local/bin/torero-capture-wrapper.sh
+    
+    # replace torero with wrapper
+    cp /usr/local/bin/torero-capture-wrapper.sh /usr/local/bin/torero
+    
+    echo "CLI execution capture wrapper installed successfully"
+}
+
+setup_supervisor() {
+    echo "installing and configuring supervisor..."
+    
+    # install supervisor
+    apt-get update -y
+    apt-get install -y supervisor
+    
+    # create supervisor configuration directory
+    mkdir -p /etc/supervisor/conf.d
+    
+    # create supervisor configuration for enabled services
+    cat > /etc/supervisor/conf.d/torero-services.conf << 'EOF'
+[unix_http_server]
+file=/tmp/supervisor.sock
+
+[supervisord]
+logfile=/tmp/supervisord.log
+logfile_maxbytes=50MB
+logfile_backups=10
+loglevel=info
+pidfile=/tmp/supervisord.pid
+nodaemon=true
+silent=false
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///tmp/supervisor.sock
+
+EOF
+
+    # add torero-api service if enabled
+    if [[ "${ENABLE_API:-false}" == "true" ]]; then
+        local api_port="${API_PORT:-8000}"
+        cat >> /etc/supervisor/conf.d/torero-services.conf << EOF
+[program:torero-api]
+command=/usr/local/bin/torero-api --host 0.0.0.0 --port ${api_port} --log-file /home/admin/.torero-api.log
+directory=/home/admin
+user=admin
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/home/admin/.torero-api.log
+stderr_logfile=/home/admin/.torero-api.log
+environment=HOME="/home/admin",USER="admin"
+
+EOF
+    fi
+    
+    # add torero-mcp service if enabled
+    if [[ "${ENABLE_MCP:-false}" == "true" ]]; then
+        local mcp_transport="${TORERO_MCP_TRANSPORT_TYPE:-sse}"
+        local mcp_host="${TORERO_MCP_TRANSPORT_HOST:-0.0.0.0}"
+        local mcp_port="${TORERO_MCP_TRANSPORT_PORT:-8080}"
+        local mcp_path="${TORERO_MCP_TRANSPORT_PATH:-/sse}"
+        local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
+        local api_timeout="${TORERO_API_TIMEOUT:-30}"
+        local log_level="${TORERO_LOG_LEVEL:-INFO}"
+        local mcp_log_file="${TORERO_MCP_LOG_FILE:-/home/admin/.torero-mcp.log}"
+        
+        cat >> /etc/supervisor/conf.d/torero-services.conf << EOF
+[program:torero-mcp]
+command=/usr/local/bin/torero-mcp run --transport ${mcp_transport} --host ${mcp_host} --port ${mcp_port}
+directory=/home/admin
+user=admin
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=${mcp_log_file}
+stderr_logfile=${mcp_log_file}
+environment=HOME="/home/admin",USER="admin",TORERO_MCP_TRANSPORT_TYPE="${mcp_transport}",TORERO_MCP_TRANSPORT_HOST="${mcp_host}",TORERO_MCP_TRANSPORT_PORT="${mcp_port}",TORERO_MCP_TRANSPORT_PATH="${mcp_path}",TORERO_API_BASE_URL="${api_base_url}",TORERO_API_TIMEOUT="${api_timeout}",TORERO_LOG_LEVEL="${log_level}"
+
+EOF
+    fi
+    
+    # add torero-ui service if enabled
+    if [[ "${ENABLE_UI:-false}" == "true" ]]; then
+        local ui_port="${UI_PORT:-8001}"
+        local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
+        local refresh_interval="${UI_REFRESH_INTERVAL:-30}"
+        local ui_log_file="${TORERO_UI_LOG_FILE:-/home/admin/.torero-ui.log}"
+        
+        cat >> /etc/supervisor/conf.d/torero-services.conf << EOF
+[program:torero-ui]
+command=python torero_ui/manage.py runserver 0.0.0.0:${ui_port} --noreload
+directory=/opt/torero-ui
+user=admin
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=${ui_log_file}
+stderr_logfile=${ui_log_file}
+environment=HOME="/home/admin",USER="admin",DJANGO_SETTINGS_MODULE="torero_ui.settings",TORERO_API_BASE_URL="${api_base_url}",UI_REFRESH_INTERVAL="${refresh_interval}",DEBUG="False"
+
+EOF
+    fi
+    
+    echo "supervisor configuration created successfully"
+    return 0
+}
+
 setup_torero_api() {
     if [[ "${ENABLE_API:-false}" != "true" ]]; then
         echo "skipping torero-api setup as ENABLE_API is not set to true"
@@ -189,15 +391,7 @@ setup_torero_api() {
     fi
 
     local api_port="${API_PORT:-8000}"
-    echo "setting up torero-api on port ${api_port}..."
-
-    # verify torero-api is available (bundled in container)
-    if [ ! -d "/opt/torero-api" ]; then
-        echo "error: torero-api not found in /opt/torero-api" >&2
-        return 1
-    fi
-    
-    echo "using bundled torero-api from /opt/torero-api (pre-installed at build time)"
+    echo "setting up torero-api runtime configuration..."
 
     # ensure db maps to admin user
     if [ ! -d "/home/admin/.torero.d" ]; then
@@ -211,24 +405,7 @@ setup_torero_api() {
     touch /home/admin/.torero-api.log
     chown admin:admin /home/admin/.torero-api.log
 
-    # start torero-api daemon
-    echo "starting torero-api daemon on port ${api_port}..."
-
-    # run as admin user
-    su - admin -c "nohup /usr/local/bin/torero-api --daemon --host 0.0.0.0 --port ${api_port} --log-file /home/admin/.torero-api.log > /dev/null 2>&1 &"
-    
-    # success?
-    sleep 2
-    if pgrep -f "torero-api" > /dev/null; then
-        echo "torero-api daemon started successfully on port ${api_port}"
-        
-        # update manifest
-        update_manifest ".services.torero_api = {\"enabled\": true, \"port\": ${api_port}}"
-    else
-        echo "warning: torero-api daemon failed to start" >&2
-        return 1
-    fi
-
+    echo "torero-api runtime setup completed (will be managed by supervisor)"
     return 0
 }
 
@@ -238,77 +415,14 @@ setup_torero_mcp() {
         return 0
     fi
 
-    # ensure torero-api is running first
-    if [[ "${ENABLE_API:-false}" == "true" ]]; then
-        local api_port="${API_PORT:-8000}"
-        if ! wait_for_api "${api_port}" 30; then
-            return 1
-        fi
-    fi
-
-    # set default MCP configuration
-    local mcp_transport="${TORERO_MCP_TRANSPORT_TYPE:-sse}"
-    local mcp_host="${TORERO_MCP_TRANSPORT_HOST:-0.0.0.0}"
-    local mcp_port="${TORERO_MCP_TRANSPORT_PORT:-8080}"
-    local mcp_path="${TORERO_MCP_TRANSPORT_PATH:-/sse}"
-    local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
-    local api_timeout="${TORERO_API_TIMEOUT:-30}"
-    local log_level="${TORERO_LOG_LEVEL:-INFO}"
-    local mcp_pid_file="${TORERO_MCP_PID_FILE:-/tmp/torero-mcp.pid}"
     local mcp_log_file="${TORERO_MCP_LOG_FILE:-/home/admin/.torero-mcp.log}"
-
-    echo "setting up torero-mcp with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
-
-    # verify torero-mcp is available (bundled in container)
-    if [ ! -d "/opt/torero-mcp" ]; then
-        echo "error: torero-mcp not found in /opt/torero-mcp" >&2
-        return 1
-    fi
-    
-    echo "using bundled torero-mcp from /opt/torero-mcp (pre-installed at build time)"
+    echo "setting up torero-mcp runtime configuration..."
 
     # create log file
     touch "${mcp_log_file}"
     chown admin:admin "${mcp_log_file}"
 
-    # export environment variables for torero-mcp
-    export TORERO_MCP_TRANSPORT_TYPE="${mcp_transport}"
-    export TORERO_MCP_TRANSPORT_HOST="${mcp_host}"
-    export TORERO_MCP_TRANSPORT_PORT="${mcp_port}"
-    export TORERO_MCP_TRANSPORT_PATH="${mcp_path}"
-    export TORERO_API_BASE_URL="${api_base_url}"
-    export TORERO_API_TIMEOUT="${api_timeout}"
-    export TORERO_LOG_LEVEL="${log_level}"
-    export TORERO_MCP_PID_FILE="${mcp_pid_file}"
-    export TORERO_MCP_LOG_FILE="${mcp_log_file}"
-
-    # start torero-mcp daemon
-    echo "starting torero-mcp daemon with transport ${mcp_transport} on ${mcp_host}:${mcp_port}..."
-    
-    # run as admin user with environment variables
-    su - admin -c "export TORERO_MCP_TRANSPORT_TYPE='${mcp_transport}' && \
-                   export TORERO_MCP_TRANSPORT_HOST='${mcp_host}' && \
-                   export TORERO_MCP_TRANSPORT_PORT='${mcp_port}' && \
-                   export TORERO_MCP_TRANSPORT_PATH='${mcp_path}' && \
-                   export TORERO_API_BASE_URL='${api_base_url}' && \
-                   export TORERO_API_TIMEOUT='${api_timeout}' && \
-                   export TORERO_LOG_LEVEL='${log_level}' && \
-                   export TORERO_MCP_PID_FILE='${mcp_pid_file}' && \
-                   export TORERO_MCP_LOG_FILE='${mcp_log_file}' && \
-                   nohup /usr/local/bin/torero-mcp run --transport ${mcp_transport} --host ${mcp_host} --port ${mcp_port} > /dev/null 2>&1 &"
-    
-    # verify startup
-    sleep 3
-    if [ -f "${mcp_pid_file}" ] && kill -0 $(cat "${mcp_pid_file}") 2>/dev/null; then
-        echo "torero-mcp daemon started successfully on ${mcp_host}:${mcp_port}"
-        
-        # update manifest
-        update_manifest ".services.torero_mcp = {\"enabled\": true, \"transport\": \"${mcp_transport}\", \"host\": \"${mcp_host}\", \"port\": ${mcp_port}}"
-    else
-        echo "warning: torero-mcp daemon failed to start" >&2
-        return 1
-    fi
-
+    echo "torero-mcp runtime setup completed (will be managed by supervisor)"
     return 0
 }
 
@@ -384,57 +498,21 @@ setup_torero_ui() {
         return 0
     fi
 
-    # ensure torero-api is running first
-    if [[ "${ENABLE_API:-false}" == "true" ]]; then
-        local api_port="${API_PORT:-8000}"
-        if ! wait_for_api "${api_port}" 30; then
-            return 1
-        fi
-    fi
-
-    # set default UI configuration
-    local ui_port="${UI_PORT:-8001}"
     local api_base_url="${TORERO_API_BASE_URL:-http://localhost:${API_PORT:-8000}}"
     local refresh_interval="${UI_REFRESH_INTERVAL:-30}"
     local ui_log_file="${TORERO_UI_LOG_FILE:-/home/admin/.torero-ui.log}"
-    local ui_pid_file="${TORERO_UI_PID_FILE:-/tmp/torero-ui.pid}"
 
-    echo "setting up torero-ui on port ${ui_port}..."
-
-    # verify torero-ui is available (bundled in container)
-    if [ ! -d "/opt/torero-ui" ]; then
-        echo "error: torero-ui not found in /opt/torero-ui" >&2
-        return 1
-    fi
-    
-    echo "using bundled torero-ui from /opt/torero-ui (pre-installed at build time)"
-
-    cd /opt/torero-ui
-    
-    # set environment variables for runtime
-    export DJANGO_SETTINGS_MODULE=torero_ui.settings
-    export TORERO_API_BASE_URL="${api_base_url}"
-    export UI_REFRESH_INTERVAL="${refresh_interval}"
-    export DEBUG=False
+    echo "setting up torero-ui runtime configuration..."
 
     # create log file
     touch "${ui_log_file}"
     chown admin:admin "${ui_log_file}"
 
-    # export environment variables for torero-ui
-    export TORERO_API_BASE_URL="${api_base_url}"
-    export UI_REFRESH_INTERVAL="${refresh_interval}"
-    export TORERO_UI_PORT="${ui_port}"
-    export TORERO_UI_LOG_FILE="${ui_log_file}"
-    export TORERO_UI_PID_FILE="${ui_pid_file}"
-    export DEBUG=False
-
     # ensure data directory exists and run migrations for persistent database
     mkdir -p /home/admin/data
-    # Fix ownership of mounted data directory (handles bind mounts from host)
     chown -R admin:admin /home/admin/data
     
-    # run database migrations for the persistent database (without build mode)
+    # run database migrations for runtime (static files collected at build time)
     echo "running database migrations for persistent storage..."
     su - admin -c "export DJANGO_SETTINGS_MODULE='torero_ui.settings' && \
                    export TORERO_API_BASE_URL='${api_base_url}' && \
@@ -443,38 +521,7 @@ setup_torero_ui() {
                    cd /opt/torero-ui && \
                    python torero_ui/manage.py migrate"
     
-    # start torero-ui daemon
-    echo "starting torero-ui daemon on port ${ui_port}..."
-    
-    # run as admin user with environment variables
-    su - admin -c "export DJANGO_SETTINGS_MODULE='torero_ui.settings' && \
-                   export TORERO_API_BASE_URL='${api_base_url}' && \
-                   export UI_REFRESH_INTERVAL='${refresh_interval}' && \
-                   export DEBUG='False' && \
-                   cd /opt/torero-ui && \
-                   nohup python torero_ui/manage.py runserver 0.0.0.0:${ui_port} --noreload > ${ui_log_file} 2>&1 &"
-    
-    # get the PID and save it
-    sleep 2
-    UI_PID=$(pgrep -f "manage.py runserver" | head -1)
-    if [ -n "$UI_PID" ]; then
-        echo "$UI_PID" > "${ui_pid_file}"
-        chown admin:admin "${ui_pid_file}"
-    fi
-    
-    # verify startup
-    sleep 3
-    if [ -f "${ui_pid_file}" ] && kill -0 $(cat "${ui_pid_file}") 2>/dev/null; then
-        echo "torero-ui daemon started successfully on port ${ui_port}"
-        echo "dashboard available at: http://localhost:${ui_port}"
-        
-        # update manifest
-        update_manifest ".services.torero_ui = {\"enabled\": true, \"port\": ${ui_port}, \"url\": \"http://localhost:${ui_port}\"}"
-    else
-        echo "warning: torero-ui daemon failed to start" >&2
-        return 1
-    fi
-
+    echo "torero-ui runtime setup completed (will be managed by supervisor)"
     return 0
 }
 
@@ -489,4 +536,17 @@ verify_opentofu || echo "OpenTofu verification failed, continuing without it"
 setup_torero_api || echo "torero-api setup failed, continuing without it"
 setup_torero_mcp || echo "torero-mcp setup failed, continuing without it"
 setup_torero_ui || echo "torero-ui setup failed, continuing without it"
-exec "$@"
+setup_cli_capture || echo "CLI capture setup failed, continuing without it"
+setup_supervisor || echo "supervisor setup failed, continuing without it"
+
+# Check if any services are enabled that need supervisor
+if [[ "${ENABLE_API:-false}" == "true" || "${ENABLE_MCP:-false}" == "true" || "${ENABLE_UI:-false}" == "true" ]]; then
+    echo "starting services with supervisor..."
+    # Wait a moment for services to be ready
+    sleep 2
+    # Start supervisor in foreground mode with our configuration
+    exec /usr/bin/supervisord -c /etc/supervisor/conf.d/torero-services.conf
+else
+    echo "no services enabled, continuing with original command..."
+    exec "$@"
+fi
