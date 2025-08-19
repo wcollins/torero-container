@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Manual build and push to GHCR
-
+# Manual build and push to GHCR with Docker Buildx support
+#
 # Source .env file if it exists to get default versions
 if [ -f .env ]; then
     source .env
@@ -58,6 +58,7 @@ prompt_for_value() {
 # set hard-coded variables
 REGISTRY="ghcr.io"
 IMAGE_NAME="torerodev/torero-container"
+BUILDER_NAME="torero-multiarch-builder"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -106,16 +107,36 @@ echo "Logging into GHCR..."
 echo "You'll need a GitHub Personal Access Token with 'write:packages' permission"
 docker login ghcr.io -u "$GITHUB_USERNAME"
 
-# build for current platform
-echo "Building image..."
+# Setup Docker Buildx for multi-arch builds
+echo "Setting up Docker Buildx for multi-arch builds..."
+
+# Check if our builder already exists
+if docker buildx ls | grep -q "^${BUILDER_NAME}"; then
+    echo "Using existing buildx builder: ${BUILDER_NAME}"
+    docker buildx use ${BUILDER_NAME}
+else
+    echo "Creating new buildx builder: ${BUILDER_NAME}"
+    docker buildx create --name ${BUILDER_NAME} --driver docker-container --use
+fi
+
+# Bootstrap the builder (start it up)
+echo "Bootstrapping buildx builder..."
+docker buildx inspect ${BUILDER_NAME} --bootstrap
+
+# Show the current builder
+echo "Current builder configuration:"
+docker buildx ls
+
+# build for current platform (for local testing)
+echo "Building image for local testing..."
 docker build -t ${REGISTRY}/${IMAGE_NAME}:${VERSION} \
   --build-arg TORERO_VERSION=${TORERO_VERSION} \
   --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
   --build-arg OPENTOFU_VERSION=${OPENTOFU_VERSION} \
   -f Containerfile .
 
-# test the image
-echo "Testing image..."
+# test the image locally
+echo "Testing image locally..."
 docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} torero version
 docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} python3 --version
 docker run --rm ${REGISTRY}/${IMAGE_NAME}:${VERSION} tofu version
@@ -132,6 +153,9 @@ docker buildx build \
   --push \
   -f Containerfile .
 
-echo "Done! Pushed to:"
-echo "  ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
-echo "  ${REGISTRY}/${IMAGE_NAME}:latest"
+echo "Done! Pushed multi-arch image to:"
+echo "  ${REGISTRY}/${IMAGE_NAME}:${VERSION} (linux/amd64, linux/arm64)"
+echo "  ${REGISTRY}/${IMAGE_NAME}:latest (linux/amd64, linux/arm64)"
+echo ""
+echo "To switch back to the default Docker driver, run:"
+echo "  docker buildx use default"
