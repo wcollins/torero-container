@@ -1,10 +1,8 @@
 ---
 services:
   torero:
-    build:
-      context: .
-      dockerfile: Containerfile
-    container_name: torero-platform
+    image: ghcr.io/torerodev/torero-container:latest
+    container_name: torero
     ports:
       - "22:22"                 # use when ENABLE_SSH_ADMIN=true
       - "8000:8000"             # use when ENABLE_API=true
