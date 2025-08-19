@@ -183,7 +183,7 @@ EOF
 }
 
 setup_torero_api() {
-    if [[ "${ENABLE_API}" != "true" ]]; then
+    if [[ "${ENABLE_API:-false}" != "true" ]]; then
         echo "skipping torero-api setup as ENABLE_API is not set to true"
         return 0
     fi
@@ -233,13 +233,13 @@ setup_torero_api() {
 }
 
 setup_torero_mcp() {
-    if [[ "${ENABLE_MCP}" != "true" ]]; then
+    if [[ "${ENABLE_MCP:-false}" != "true" ]]; then
         echo "skipping torero-mcp setup as ENABLE_MCP is not set to true"
         return 0
     fi
 
     # ensure torero-api is running first
-    if [[ "${ENABLE_API}" == "true" ]]; then
+    if [[ "${ENABLE_API:-false}" == "true" ]]; then
         local api_port="${API_PORT:-8000}"
         if ! wait_for_api "${api_port}" 30; then
             return 1
@@ -379,13 +379,13 @@ setup_ssh_runtime() {
 }
 
 setup_torero_ui() {
-    if [[ "${ENABLE_UI}" != "true" ]]; then
+    if [[ "${ENABLE_UI:-false}" != "true" ]]; then
         echo "skipping torero-ui setup as ENABLE_UI is not set to true"
         return 0
     fi
 
     # ensure torero-api is running first
-    if [[ "${ENABLE_API}" == "true" ]]; then
+    if [[ "${ENABLE_API:-false}" == "true" ]]; then
         local api_port="${API_PORT:-8000}"
         if ! wait_for_api "${api_port}" 30; then
             return 1
