@@ -1,0 +1,175 @@
+{% extends "dashboard/base.html" %}
+
+{% block content %}
+<!-- summary statistics -->
+<div class="section">
+    <div class="section-title">System Overview</div>
+    <div class="summary-stats" id="summary-stats">
+        <div class="stat-card">
+            <div class="stat-value" id="total-services">{{ stats.total_services }}</div>
+            <div class="stat-label">Total Services</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="total-executions">{{ stats.total_executions }}</div>
+            <div class="stat-label">Total Executions</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="success-rate">{{ stats.success_rate|floatformat:1 }}%</div>
+            <div class="stat-label">Success Rate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="avg-duration">
+                {% if stats.avg_duration_seconds %}
+                    {{ stats.avg_duration_seconds|floatformat:1 }}s
+                {% else %}
+                    N/A
+                {% endif %}
+            </div>
+            <div class="stat-label">Avg Duration</div>
+        </div>
+    </div>
+</div>
+
+<!-- service status grid -->
+<div class="section">
+    <div class="section-title">Service Status</div>
+    <div class="status-grid" id="service-status">
+        {% for service in services %}
+        <div class="status-card" data-service="{{ service.name }}">
+            <div class="service-name">{{ service.name }}</div>
+            <div class="status-info">
+                <span class="status-label">Type:</span>
+                <span class="status-value">{{ service.service_type }}</span>
+            </div>
+            <div class="status-info">
+                <span class="status-label">Executions:</span>
+                <span class="status-value">{{ service.total_executions }}</span>
+            </div>
+            <div class="status-info">
+                <span class="status-label">Success Rate:</span>
+                <span class="status-success">{{ service.success_rate|floatformat:1 }}%</span>
+            </div>
+        </div>
+        {% empty %}
+        <div class="status-card">
+            <div class="service-name">No Services</div>
+            <div class="status-info">
+                <span class="status-label">Click sync to load services</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- execution history tabs -->
+<div class="section">
+    <div class="section-title">Execution History</div>
+    <div class="tabs-container">
+        <div class="tab-buttons">
+            <button class="tab-button active" onclick="switchTab('recent')">Recent Executions</button>
+            <button class="tab-button" onclick="switchTab('successful')">Successful</button>
+            <button class="tab-button" onclick="switchTab('failed')">Failed</button>
+        </div>
+        
+        <div id="recent" class="tab-content active">
+            <ul class="execution-list" id="recent-executions">
+                {% for execution in recent_executions %}
+                <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
+                    <div class="execution-header">
+                        <span class="execution-service">{{ execution.service_name }}</span>
+                        <span class="execution-status {{ execution.status }}">{{ execution.status|upper }}</span>
+                    </div>
+                    <div class="execution-details">
+                        <span>{{ execution.service_type }}</span>
+                        <span>{{ execution.started_at|date:"M d, H:i" }}</span>
+                        <span>{{ execution.execution_time_display }}</span>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="execution-item">
+                    <div class="execution-header">
+                        <span class="execution-service">No executions found</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div id="successful" class="tab-content">
+            <ul class="execution-list" id="successful-executions">
+                {% for execution in recent_executions %}
+                    {% if execution.status == 'success' %}
+                    <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
+                        <div class="execution-header">
+                            <span class="execution-service">{{ execution.service_name }}</span>
+                            <span class="execution-status success">SUCCESS</span>
+                        </div>
+                        <div class="execution-details">
+                            <span>{{ execution.service_type }}</span>
+                            <span>{{ execution.started_at|date:"M d, H:i" }}</span>
+                            <span>{{ execution.execution_time_display }}</span>
+                        </div>
+                    </li>
+                    {% endif %}
+                {% empty %}
+                <li class="execution-item">
+                    <div class="execution-header">
+                        <span class="execution-service">No successful executions</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div id="failed" class="tab-content">
+            <ul class="execution-list" id="failed-executions">
+                {% for execution in recent_executions %}
+                    {% if execution.status == 'failed' %}
+                    <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
+                        <div class="execution-header">
+                            <span class="execution-service">{{ execution.service_name }}</span>
+                            <span class="execution-status failed">FAILED</span>
+                        </div>
+                        <div class="execution-details">
+                            <span>{{ execution.service_type }}</span>
+                            <span>{{ execution.started_at|date:"M d, H:i" }}</span>
+                            <span>{{ execution.execution_time_display }}</span>
+                        </div>
+                    </li>
+                    {% endif %}
+                {% empty %}
+                <li class="execution-item">
+                    <div class="execution-header">
+                        <span class="execution-service">No failed executions</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- action buttons -->
+<div class="section">
+    <div style="display: flex; gap: 20px; justify-content: center;">
+        <button onclick="syncServices()" class="tab-button" style="padding: 15px 30px; border: 1px solid #333;">
+            Sync Services
+        </button>
+        <button onclick="refreshDashboard()" class="tab-button" style="padding: 15px 30px; border: 1px solid #333;">
+            Refresh Data
+        </button>
+    </div>
+</div>
+
+<script>
+// pass data to javascript
+window.dashboardConfig = {
+    refreshInterval: {{ refresh_interval }} * 1000,  // convert to milliseconds
+    apiUrls: {
+        data: "{% url 'dashboard:api_data' %}",
+        sync: "{% url 'dashboard:api_sync' %}",
+        executionDetails: "{% url 'dashboard:api_execution_details' execution_id=0 %}".replace('0', '{id}')
+    }
+};
+</script>
+{% endblock %}
