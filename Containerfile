@@ -74,8 +74,8 @@ RUN CONTAINER_BUILD_MODE=true python torero_ui/manage.py migrate && \
     CONTAINER_BUILD_MODE=true python torero_ui/manage.py collectstatic --noinput
 WORKDIR /
 
-# Install curl and unzip for runtime OpenTofu installation
-RUN apt-get update && apt-get install -y curl unzip && \
+# Install curl, unzip, and supervisor for runtime OpenTofu installation and service management
+RUN apt-get update && apt-get install -y curl unzip supervisor && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # make executable, run configuration script
