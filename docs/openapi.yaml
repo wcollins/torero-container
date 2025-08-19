@@ -1,0 +1,1808 @@
+components:
+  schemas:
+    APIInfo:
+      description: 'Information about the API for the root endpoint response.
+
+
+        Provides metadata about the API and navigation links to available endpoints.'
+      example:
+        description: API for torero services
+        documentation: http://localhost:8000/docs
+        endpoints:
+          service_tags: http://localhost:8000/v1/services/tags
+          service_types: http://localhost:8000/v1/services/types
+          services: http://localhost:8000/v1/services/
+        name: torero API
+        version: 0.1.0
+      properties:
+        description:
+          description: API description
+          title: Description
+          type: string
+        documentation:
+          description: URL to API documentation
+          title: Documentation
+          type: string
+        endpoints:
+          additionalProperties:
+            type: string
+          description: Available API endpoints
+          title: Endpoints
+          type: object
+        name:
+          description: API name
+          title: Name
+          type: string
+        version:
+          description: API version
+          title: Version
+          type: string
+      required:
+      - name
+      - version
+      - description
+      - documentation
+      - endpoints
+      title: APIInfo
+      type: object
+    Body_check_import_v1_db_import_check_post:
+      properties:
+        file:
+          format: binary
+          title: File
+          type: string
+      required:
+      - file
+      title: Body_check_import_v1_db_import_check_post
+      type: object
+    Body_import_database_v1_db_import_post:
+      properties:
+        check:
+          default: false
+          title: Check
+          type: boolean
+        file:
+          format: binary
+          title: File
+          type: string
+        force:
+          default: false
+          title: Force
+          type: boolean
+        validate_only:
+          default: false
+          title: Validate Only
+          type: boolean
+      required:
+      - file
+      title: Body_import_database_v1_db_import_post
+      type: object
+    Body_import_from_repository_v1_db_import_repository_post:
+      properties:
+        check:
+          default: false
+          title: Check
+          type: boolean
+        file_path:
+          title: File Path
+          type: string
+        force:
+          default: false
+          title: Force
+          type: boolean
+        private_key_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Private Key Name
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        repository:
+          title: Repository
+          type: string
+        validate_only:
+          default: false
+          title: Validate Only
+          type: boolean
+      required:
+      - repository
+      - file_path
+      title: Body_import_from_repository_v1_db_import_repository_post
+      type: object
+    DatabaseExportFormat:
+      description: Supported export formats for database export.
+      enum:
+      - json
+      - yaml
+      title: DatabaseExportFormat
+      type: string
+    DatabaseImportCheckResult:
+      description: Result of import check operation.
+      properties:
+        additions:
+          description: Resources that would be added
+          items:
+            $ref: '#/components/schemas/ImportCheckItem'
+          title: Additions
+          type: array
+        conflicts:
+          description: Resources that would conflict
+          items:
+            $ref: '#/components/schemas/ImportCheckItem'
+          title: Conflicts
+          type: array
+        replacements:
+          description: Resources that would be replaced
+          items:
+            $ref: '#/components/schemas/ImportCheckItem'
+          title: Replacements
+          type: array
+        summary:
+          additionalProperties:
+            type: integer
+          description: Summary counts by type
+          title: Summary
+          type: object
+      title: DatabaseImportCheckResult
+      type: object
+    Decorator:
+      description: "Represents a torero decorator.\n\nDecorators modify the behavior\
+        \ of torero services by adding functionality\nsuch as authentication, logging,\
+        \ or parameter validation.\n\nAttributes:\n    name: Unique identifier for\
+        \ the decorator\n    description: Human-readable explanation of the decorator's\
+        \ purpose\n    type: Category of decorator indicating its function\n    parameters:\
+        \ Schema for parameters accepted by the decorator\n    registries: Optional\
+        \ metadata about where the decorator is registered"
+      example:
+        description: Adds HTTP Basic Authentication to service calls
+        name: auth-basic
+        parameters:
+          password:
+            required: true
+            secret: true
+            type: string
+          username:
+            required: true
+            type: string
+        registries:
+          file:
+            path: /etc/torero/decorators/auth-basic
+        type: authentication
+      properties:
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Human-readable explanation of the decorator's purpose
+          title: Description
+        name:
+          description: Unique identifier for the decorator
+          title: Name
+          type: string
+        parameters:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Schema for parameters accepted by the decorator
+          title: Parameters
+        registries:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Metadata about where the decorator is registered
+          title: Registries
+        type:
+          description: Category of decorator indicating its function
+          title: Type
+          type: string
+      required:
+      - name
+      - type
+      title: Decorator
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    ImportCheckItem:
+      description: Individual item in import check result.
+      properties:
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Additional information
+          title: Message
+        name:
+          description: Resource name
+          title: Name
+          type: string
+        state:
+          $ref: '#/components/schemas/ImportCheckState'
+          description: Import state
+        type:
+          description: Resource type
+          title: Type
+          type: string
+      required:
+      - name
+      - type
+      - state
+      title: ImportCheckItem
+      type: object
+    ImportCheckState:
+      description: States for resources during import check.
+      enum:
+      - Conflict
+      - Add
+      - Replacement
+      title: ImportCheckState
+      type: string
+    Registry:
+      description: 'Represents a torero registry.
+
+
+        A registry is a location where packages, modules, or artifacts can be stored
+        and retrieved.
+
+        This could be an Ansible Galaxy registry, PyPI registry, or other package
+        registries.'
+      example:
+        description: Main Ansible Galaxy registry
+        metadata:
+          created: '2024-01-01T00:00:00Z'
+          credentials: galaxy-api-key
+          id: reg-123
+          tags:
+          - ansible
+          - production
+        name: ansible-galaxy-main
+        type: ansible-galaxy
+        url: https://galaxy.ansible.com
+      properties:
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Description of the registry
+          title: Description
+        metadata:
+          anyOf:
+          - $ref: '#/components/schemas/RegistryMetadata'
+          - type: 'null'
+          description: Additional metadata for the registry
+        name:
+          description: The name of the registry
+          examples:
+          - ansible-galaxy-main
+          - pypi-internal
+          title: Name
+          type: string
+        type:
+          description: The type of registry (e.g., ansible-galaxy, pypi)
+          examples:
+          - ansible-galaxy
+          - pypi
+          title: Type
+          type: string
+        url:
+          description: The URL of the registry
+          examples:
+          - https://galaxy.ansible.com
+          - https://pypi.org/simple
+          title: Url
+          type: string
+      required:
+      - name
+      - type
+      - url
+      title: Registry
+      type: object
+    RegistryMetadata:
+      description: Metadata information for a registry
+      properties:
+        created:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: Creation timestamp
+          title: Created
+        credentials:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Credentials reference for the registry
+          title: Credentials
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Unique identifier for the registry
+          title: Id
+        tags:
+          description: Tags associated with the registry
+          items:
+            type: string
+          title: Tags
+          type: array
+      title: RegistryMetadata
+      type: object
+    Repository:
+      description: "Represents a torero repository.\n\nRepositories are storage locations\
+        \ for torero components such as\nservices, decorators, and other resources.\n\
+        \nAttributes:\n    name: Unique identifier for the repository\n    description:\
+        \ Human-readable explanation of the repository's purpose\n    type: Category\
+        \ of repository (e.g., 'file', 'git', 's3')\n    location: Location URI for\
+        \ the repository\n    metadata: Optional additional metadata about the repository"
+      example:
+        description: Local file repository for services
+        location: /etc/torero/services
+        metadata:
+          created: '2023-01-01T00:00:00Z'
+          owner: torero
+        name: local-services
+        type: file
+      properties:
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Human-readable explanation of the repository's purpose
+          title: Description
+        location:
+          description: Location URI for the repository
+          title: Location
+          type: string
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Additional metadata about the repository
+          title: Metadata
+        name:
+          description: Unique identifier for the repository
+          title: Name
+          type: string
+        type:
+          description: Category of repository (e.g., 'file', 'git', 's3')
+          title: Type
+          type: string
+      required:
+      - name
+      - type
+      - location
+      title: Repository
+      type: object
+    Secret:
+      description: "Represents a torero secret.\n\nSecrets are sensitive values stored\
+        \ securely and used by torero\nservices and decorators.\n\nAttributes:\n \
+        \   name: Unique identifier for the secret\n    description: Human-readable\
+        \ explanation of the secret's purpose\n    type: Category of secret (e.g.,\
+        \ 'password', 'api-key', 'token')\n    created_at: Timestamp when the secret\
+        \ was created\n    metadata: Optional additional metadata about the secret"
+      example:
+        created_at: '2023-01-01T00:00:00Z'
+        description: Database password for the application
+        metadata:
+          owner: admin
+          provider: vault
+        name: db-password
+        type: password
+      properties:
+        created_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: Timestamp when the secret was created
+          title: Created At
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Human-readable explanation of the secret's purpose
+          title: Description
+        metadata:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Additional metadata about the secret
+          title: Metadata
+        name:
+          description: Unique identifier for the secret
+          title: Name
+          type: string
+        type:
+          description: Category of secret (e.g., 'password', 'api-key', 'token')
+          title: Type
+          type: string
+      required:
+      - name
+      - type
+      title: Secret
+      type: object
+    Service:
+      description: "Represents a torero service.\n\nA service is a runnable unit in\
+        \ torero that can be executed to perform specific tasks.\nServices have different\
+        \ types (e.g., ansible-playbook, opentofu-plan, python-script)\nand can be\
+        \ tagged for organization and filtering.\n\nAttributes:\n    name: Unique\
+        \ identifier for the service\n    description: Human-readable explanation\
+        \ of the service's purpose\n    type: Category of service indicating the underlying\
+        \ technology\n    tags: List of labels for grouping and filtering services\n\
+        \    registries: Optional metadata about where the service is registered"
+      example:
+        description: Backs up configurations from network devices
+        name: network-backup
+        registries:
+          file:
+            path: /etc/torero/services/network-backup
+        tags:
+        - network
+        - backup
+        - daily
+        type: ansible-playbook
+      properties:
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Human-readable explanation of the service's purpose
+          title: Description
+        name:
+          description: Unique identifier for the service
+          title: Name
+          type: string
+        registries:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          description: Metadata about where the service is registered
+          title: Registries
+        tags:
+          description: List of labels for grouping and filtering services
+          items:
+            type: string
+          title: Tags
+          type: array
+        type:
+          description: Category of service indicating the underlying technology
+          title: Type
+          type: string
+      required:
+      - name
+      - type
+      title: Service
+      type: object
+    ServiceExecutionResult:
+      description: "Result of a service execution.\n\nRepresents the output of running\
+        \ a torero service.\n\nAttributes:\n    return_code: The exit code returned\
+        \ by the executed service\n    stdout: Standard output captured during execution\n\
+        \    stderr: Standard error output captured during execution\n    start_time:\
+        \ ISO 8601 timestamp when execution started\n    end_time: ISO 8601 timestamp\
+        \ when execution completed\n    elapsed_time: Execution duration in seconds"
+      example:
+        elapsed_time: 3.1280594
+        end_time: '2025-05-26T22:18:45.034007Z'
+        return_code: 0
+        start_time: '2025-05-26T22:18:41.905955Z'
+        stderr: '[WARNING]: No inventory was parsed, only implicit localhost is available
+
+          [WARNING]: provided hosts list is empty, only localhost is available. Note
+          that
+
+          the implicit localhost does not match ''all''
+
+          '
+        stdout: "\nPLAY [Hello World] *************************************************************\n\
+          \nTASK [Gathering Facts] *********************************************************\n\
+          ok: [127.0.0.1]\n\nTASK [Ping my hosts] ***********************************************************\n\
+          ok: [127.0.0.1]\n\nTASK [Print message] ***********************************************************\n\
+          ok: [127.0.0.1] => {\n    \"msg\": \"Hello world!\"\n}\n\nPLAY RECAP *********************************************************************\n\
+          127.0.0.1                  : ok=3    changed=0    unreachable=0    failed=0\
+          \    skipped=0    rescued=0    ignored=0   \n\n"
+      properties:
+        elapsed_time:
+          description: Execution duration in seconds
+          title: Elapsed Time
+          type: number
+        end_time:
+          description: ISO 8601 timestamp when execution completed
+          title: End Time
+          type: string
+        return_code:
+          description: Exit code from the execution
+          title: Return Code
+          type: integer
+        start_time:
+          description: ISO 8601 timestamp when execution started
+          title: Start Time
+          type: string
+        stderr:
+          description: Standard error output from the execution
+          title: Stderr
+          type: string
+        stdout:
+          description: Standard output from the execution
+          title: Stdout
+          type: string
+      required:
+      - return_code
+      - stdout
+      - stderr
+      - start_time
+      - end_time
+      - elapsed_time
+      title: ServiceExecutionResult
+      type: object
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+info:
+  contact:
+    email: opensource@itential.com
+    name: torero Development Team
+    url: https://torero.dev/contact
+  description: "\n        RESTful API for interacting with torero services.\n    \
+    \    \n        This API provides endpoints for discovering and managing torero\
+    \ services,\n        allowing you to list services, filter by type or tag, and\
+    \ get metadata\n        about available service types and tags.\n        \n  \
+    \      Model Context Protocol (MCP) Integration:\n        This API follows OpenAPI\
+    \ standards and provides comprehensive type\n        information for seamless\
+    \ integration with MCP-enabled applications.\n        "
+  license:
+    name: Apache License 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  title: torero API
+  version: 0.1.0
+  x-mcp-compatible: true
+  x-mcp-description: This API is optimized for Model Context Protocol integration.
+  x-mcp-version: '1.0'
+openapi: 3.1.0
+paths:
+  /:
+    get:
+      description: Returns basic information about the API and available endpoints.
+      operationId: root__get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIInfo'
+          description: Successful Response
+      summary: API information
+      tags:
+      - root
+  /health:
+    get:
+      description: Check if the API is operational and can connect to torero.
+      operationId: health_check_health_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: API health check
+      tags:
+      - system
+  /v1/db/export:
+    get:
+      description: "Export services and resources to a file.\n\nThis endpoint exports\
+        \ all torero configurations including decorators, \nrepositories, and services\
+        \ in the specified format.\n\nArgs:\n    format: The output format (json or\
+        \ yaml). Defaults to yaml.\n\nReturns:\n    The exported configuration data.\n\
+        \nRaises:\n    HTTPException: If the export operation fails."
+      operationId: export_database_v1_db_export_get
+      parameters:
+      - in: query
+        name: format
+        required: false
+        schema:
+          $ref: '#/components/schemas/DatabaseExportFormat'
+          default: yaml
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Export Database V1 Db Export Get
+                type: object
+          description: Successful Response
+        '404':
+          description: Not found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Export Database
+      tags:
+      - database
+      - database
+  /v1/db/export/download:
+    get:
+      description: "Export services and resources as a downloadable file.\n\nThis\
+        \ endpoint exports all torero configurations and returns them as a \ndownloadable\
+        \ file with appropriate content type headers.\n\nArgs:\n    format: The output\
+        \ format (json or yaml). Defaults to yaml.\n    filename: Optional custom\
+        \ filename for the export.\n\nReturns:\n    A file response with the exported\
+        \ data.\n\nRaises:\n    HTTPException: If the export operation fails."
+      operationId: download_database_export_v1_db_export_download_get
+      parameters:
+      - in: query
+        name: format
+        required: false
+        schema:
+          $ref: '#/components/schemas/DatabaseExportFormat'
+          default: yaml
+      - in: query
+        name: filename
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Filename
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '404':
+          description: Not found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Download Database Export
+      tags:
+      - database
+      - database
+  /v1/db/import:
+    post:
+      description: "Import resources/services from a service file.\n\nThis endpoint\
+        \ imports services and resources from an uploaded file to move\nconfigurations\
+        \ between torero instances.\n\nArgs:\n    file: The service configuration\
+        \ file to import.\n    force: Override existing services.\n    check: Perform\
+        \ validation and dry-run of import.\n    validate_only: Validate service file\
+        \ only.\n\nReturns:\n    Import result including status and any conflicts\
+        \ or changes.\n\nRaises:\n    HTTPException: If the import operation fails."
+      operationId: import_database_v1_db_import_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_import_database_v1_db_import_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Import Database V1 Db Import Post
+                type: object
+          description: Successful Response
+        '404':
+          description: Not found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Import Database
+      tags:
+      - database
+      - database
+  /v1/db/import/check:
+    post:
+      description: "Check what would happen during an import without actually importing.\n\
+        \nThis endpoint performs a dry-run of the import operation to show what\n\
+        resources would be added, replaced, or conflict.\n\nArgs:\n    file: The service\
+        \ configuration file to check.\n\nReturns:\n    Check results showing conflicts,\
+        \ additions, and potential replacements.\n\nRaises:\n    HTTPException: If\
+        \ the check operation fails."
+      operationId: check_import_v1_db_import_check_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_check_import_v1_db_import_check_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseImportCheckResult'
+          description: Successful Response
+        '404':
+          description: Not found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Check Import
+      tags:
+      - database
+      - database
+  /v1/db/import/repository:
+    post:
+      description: "Import resources/services from a repository.\n\nThis endpoint\
+        \ imports services and resources from a file in a git repository.\nSupports\
+        \ both HTTP and SSH repositories with optional private key authentication.\n\
+        \nArgs:\n    repository: Repository URL (HTTP or SSH).\n    file_path: Path\
+        \ to the import file within the repository.\n    reference: Optional branch/tag/commit\
+        \ reference.\n    private_key_name: Optional private key name for SSH authentication.\n\
+        \    force: Override existing services.\n    check: Perform validation and\
+        \ dry-run of import.\n    validate_only: Validate service file only.\n\nReturns:\n\
+        \    Import result including status and any conflicts or changes.\n\nRaises:\n\
+        \    HTTPException: If the import operation fails."
+      operationId: import_from_repository_v1_db_import_repository_post
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Body_import_from_repository_v1_db_import_repository_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Import From Repository V1 Db Import Repository Post
+                type: object
+          description: Successful Response
+        '404':
+          description: Not found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Import From Repository
+      tags:
+      - database
+      - database
+  /v1/decorators/:
+    get:
+      description: "Get all registered torero decorators with optional filtering.\n\
+        \    \n    This endpoint returns a list of all decorators registered with\
+        \ torero.\n    You can filter the results by decorator type to narrow down\
+        \ the list.\n    \n    Examples:\n    - List all decorators: GET /v1/decorators/\n\
+        \    - List all authentication decorators: GET /v1/decorators/?type=authentication"
+      operationId: list_decorators_v1_decorators__get
+      parameters:
+      - description: Filter by decorator type, e.g. 'authentication'
+        in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by decorator type, e.g. 'authentication'
+          title: Type
+      - description: Number of items to skip
+        in: query
+        name: skip
+        required: false
+        schema:
+          default: 0
+          description: Number of items to skip
+          minimum: 0
+          title: Skip
+          type: integer
+      - description: Maximum number of items to return
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          description: Maximum number of items to return
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Decorator'
+                title: Response List Decorators V1 Decorators  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List decorators
+      tags:
+      - decorators
+  /v1/decorators/types:
+    get:
+      description: "Return a list of unique decorator types used by registered decorators.\n\
+        \    \n    This endpoint provides a list of all distinct decorator types that\
+        \ are \n    currently in use across all registered decorators.\n    \n   \
+        \ This information is useful for:\n    - Building UI dropdown filters\n  \
+        \  - Understanding what types of decorators are available\n    - Validating\
+        \ type values for new decorators"
+      operationId: list_decorator_types_v1_decorators_types_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Decorator Types V1 Decorators Types Get
+                type: array
+          description: Successful Response
+      summary: List decorator types
+      tags:
+      - decorators
+  /v1/decorators/{name}:
+    get:
+      description: "Get detailed information about a specific decorator by name.\n\
+        \    \n    This endpoint retrieves detailed information about a single decorator\n\
+        \    identified by its name. The name is case-sensitive and must match\n \
+        \   exactly the name of a registered decorator.\n    \n    If no decorator\
+        \ is found with the specified name, a 404 error is returned."
+      operationId: get_decorator_v1_decorators__name__get
+      parameters:
+      - description: Name of the decorator to retrieve
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the decorator to retrieve
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decorator'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get decorator details
+      tags:
+      - decorators
+  /v1/decorators/{name}/describe:
+    get:
+      description: "Get detailed description of a specific decorator by name.\n  \
+        \  \n    This endpoint returns comprehensive information about a decorator,\n\
+        \    including all configuration details, parameters, and metadata.\n    \n\
+        \    The name is case-sensitive and must match exactly the name of a registered\
+        \ decorator.\n    \n    If no decorator is found with the specified name,\
+        \ a 404 error is returned."
+      operationId: describe_decorator_detail_v1_decorators__name__describe_get
+      parameters:
+      - description: Name of the decorator to describe
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the decorator to describe
+          examples:
+            audit-decorator:
+              description: Get detailed description of an audit decorator
+              summary: Audit Decorator
+              value: audit-decorator
+            logging-decorator:
+              description: Get detailed description of a logging decorator
+              summary: Logging Decorator
+              value: logging-decorator
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Describe Decorator Detail V1 Decorators  Name  Describe
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get detailed decorator description
+      tags:
+      - decorators
+  /v1/execute/ansible-playbook/{name}:
+    post:
+      description: "Execute a registered torero Ansible playbook service by name.\n\
+        \    \n    This endpoint runs the specified Ansible playbook service and returns\n\
+        \    the execution results, including standard output, standard error,\n \
+        \   return code, and timing information.\n    \n    The name is case-sensitive\
+        \ and must match exactly the name of a registered\n    Ansible playbook service.\n\
+        \    \n    If no service is found with the specified name, a 404 error is\
+        \ returned."
+      operationId: run_ansible_service_v1_execute_ansible_playbook__name__post
+      parameters:
+      - description: Name of the Ansible playbook service to run
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the Ansible playbook service to run
+          examples:
+            hello-ansible:
+              description: Run a simple hello world Ansible service
+              summary: Hello World Ansible Service
+              value: hello-ansible
+            network-backup:
+              description: Run a network backup service
+              summary: Network Backup Service
+              value: network-backup
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceExecutionResult'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Ansible playbook service
+      tags:
+      - execution
+  /v1/execute/opentofu-plan/{name}/apply:
+    post:
+      description: "Execute a registered torero OpenTofu plan service to apply infrastructure\
+        \ changes.\n    \n    This endpoint runs the specified OpenTofu plan service\
+        \ in apply mode and returns\n    the execution results, including standard\
+        \ output, standard error,\n    return code, and timing information.\n    \n\
+        \    The name is case-sensitive and must match exactly the name of a registered\n\
+        \    OpenTofu plan service.\n    \n    If no service is found with the specified\
+        \ name, a 404 error is returned."
+      operationId: apply_opentofu_plan_v1_execute_opentofu_plan__name__apply_post
+      parameters:
+      - description: Name of the OpenTofu plan service to apply
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the OpenTofu plan service to apply
+          examples:
+            cloud-resources:
+              description: Apply cloud resource configuration
+              summary: Cloud Resources
+              value: cloud-resources
+            infrastructure-deploy:
+              description: Apply infrastructure changes using OpenTofu
+              summary: Infrastructure Deployment
+              value: infrastructure-deploy
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceExecutionResult'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Apply OpenTofu plan service
+      tags:
+      - execution
+  /v1/execute/opentofu-plan/{name}/destroy:
+    post:
+      description: "Execute a registered torero OpenTofu plan service to destroy infrastructure\
+        \ resources.\n    \n    This endpoint runs the specified OpenTofu plan service\
+        \ in destroy mode and returns\n    the execution results, including standard\
+        \ output, standard error,\n    return code, and timing information.\n    \n\
+        \    The name is case-sensitive and must match exactly the name of a registered\n\
+        \    OpenTofu plan service.\n    \n    If no service is found with the specified\
+        \ name, a 404 error is returned.\n    \n    WARNING: This operation will destroy\
+        \ infrastructure resources and cannot be undone."
+      operationId: destroy_opentofu_plan_v1_execute_opentofu_plan__name__destroy_post
+      parameters:
+      - description: Name of the OpenTofu plan service to destroy
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the OpenTofu plan service to destroy
+          examples:
+            cloud-resources:
+              description: Destroy cloud resource configuration
+              summary: Cloud Resources
+              value: cloud-resources
+            infrastructure-deploy:
+              description: Destroy infrastructure managed by OpenTofu
+              summary: Infrastructure Deployment
+              value: infrastructure-deploy
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceExecutionResult'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Destroy OpenTofu plan service resources
+      tags:
+      - execution
+  /v1/execute/python-script/{name}:
+    post:
+      description: "Execute a registered torero Python script service by name.\n \
+        \   \n    This endpoint runs the specified Python script service and returns\n\
+        \    the execution results, including standard output, standard error,\n \
+        \   return code, and timing information.\n    \n    The name is case-sensitive\
+        \ and must match exactly the name of a registered\n    Python script service.\n\
+        \    \n    If no service is found with the specified name, a 404 error is\
+        \ returned."
+      operationId: run_python_script_v1_execute_python_script__name__post
+      parameters:
+      - description: Name of the Python script service to run
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the Python script service to run
+          examples:
+            data-processor:
+              description: Run a Python script that processes data
+              summary: Data Processing Script
+              value: data-processor
+            hello-python:
+              description: Run a simple hello world Python script
+              summary: Hello World Python Script
+              value: hello-python
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceExecutionResult'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Python script service
+      tags:
+      - execution
+  /v1/registries/:
+    get:
+      description: "Get a list of all registered torero registries.\n    \n    This\
+        \ endpoint returns all registries configured in torero, including their\n\
+        \    type, URL, and metadata. You can optionally filter by registry type.\n\
+        \    \n    Registries are locations where packages, modules, or artifacts\
+        \ can be stored\n    and retrieved, such as Ansible Galaxy or PyPI."
+      operationId: list_registries_v1_registries__get
+      parameters:
+      - description: Filter registries by type (e.g., 'ansible-galaxy', 'pypi')
+        in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter registries by type (e.g., 'ansible-galaxy', 'pypi')
+          examples:
+            ansible-galaxy:
+              description: Show only Ansible Galaxy registries
+              summary: Filter for Ansible Galaxy registries
+              value: ansible-galaxy
+            pypi:
+              description: Show only PyPI registries
+              summary: Filter for PyPI registries
+              value: pypi
+          title: Type
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Registry'
+                title: Response List Registries V1 Registries  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List all registries
+      tags:
+      - registries
+  /v1/registries/types:
+    get:
+      description: "Get a list of all unique registry types.\n    \n    This endpoint\
+        \ returns a deduplicated list of all registry types that are\n    currently\
+        \ registered in torero, such as 'ansible-galaxy', 'pypi', etc."
+      operationId: list_registry_types_v1_registries_types_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Registry Types V1 Registries Types Get
+                type: array
+          description: Successful Response
+      summary: List unique registry types
+      tags:
+      - registries
+  /v1/registries/{name}:
+    get:
+      description: "Get a specific registry by its name.\n    \n    This endpoint\
+        \ returns detailed information about a single registry,\n    including its\
+        \ type, URL, and metadata.\n    \n    The name is case-sensitive and must\
+        \ match exactly the name of a registered registry.\n    \n    If no registry\
+        \ is found with the specified name, a 404 error is returned."
+      operationId: get_registry_v1_registries__name__get
+      parameters:
+      - description: Name of the registry to retrieve
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the registry to retrieve
+          examples:
+            ansible-galaxy-main:
+              description: Get the main Ansible Galaxy registry
+              summary: Ansible Galaxy Registry
+              value: ansible-galaxy-main
+            pypi-internal:
+              description: Get an internal PyPI registry
+              summary: Internal PyPI Registry
+              value: pypi-internal
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registry'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get registry by name
+      tags:
+      - registries
+  /v1/repositories/:
+    get:
+      description: "Get all registered torero repositories with optional filtering.\n\
+        \    \n    This endpoint returns a list of all repositories registered with\
+        \ torero.\n    You can filter the results by repository type to narrow down\
+        \ the list.\n    \n    Examples:\n    - List all repositories: GET /v1/repositories/\n\
+        \    - List all file repositories: GET /v1/repositories/?type=file\n    -\
+        \ List all git repositories: GET /v1/repositories/?type=git"
+      operationId: list_repositories_v1_repositories__get
+      parameters:
+      - description: Filter by repository type, e.g. 'file', 'git', 's3'
+        in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by repository type, e.g. 'file', 'git', 's3'
+          title: Type
+      - description: Number of items to skip
+        in: query
+        name: skip
+        required: false
+        schema:
+          default: 0
+          description: Number of items to skip
+          minimum: 0
+          title: Skip
+          type: integer
+      - description: Maximum number of items to return
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          description: Maximum number of items to return
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Repository'
+                title: Response List Repositories V1 Repositories  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List repositories
+      tags:
+      - repositories
+  /v1/repositories/types:
+    get:
+      description: "Return a list of unique repository types used by registered repositories.\n\
+        \    \n    This endpoint provides a list of all distinct repository types\
+        \ (e.g., file, git, s3) \n    that are currently in use across all registered\
+        \ repositories.\n    \n    This information is useful for:\n    - Building\
+        \ UI dropdown filters\n    - Understanding what types of repositories are\
+        \ available\n    - Validating type values for new repositories"
+      operationId: list_repository_types_v1_repositories_types_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Repository Types V1 Repositories Types Get
+                type: array
+          description: Successful Response
+      summary: List repository types
+      tags:
+      - repositories
+  /v1/repositories/{name}:
+    get:
+      description: "Get detailed information about a specific repository by name.\n\
+        \    \n    This endpoint retrieves detailed information about a single repository\n\
+        \    identified by its name. The name is case-sensitive and must match\n \
+        \   exactly the name of a registered repository.\n    \n    If no repository\
+        \ is found with the specified name, a 404 error is returned."
+      operationId: get_repository_v1_repositories__name__get
+      parameters:
+      - description: Name of the repository to retrieve
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the repository to retrieve
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get repository details
+      tags:
+      - repositories
+  /v1/repositories/{name}/describe:
+    get:
+      description: "Get detailed description of a specific repository by name.\n \
+        \   \n    This endpoint returns comprehensive information about a repository,\n\
+        \    including all configuration details, metadata, and additional properties\n\
+        \    that may not be included in the standard repository object.\n    \n \
+        \   The name is case-sensitive and must match exactly the name of a registered\
+        \ repository.\n    \n    If no repository is found with the specified name,\
+        \ a 404 error is returned."
+      operationId: describe_repository_detail_v1_repositories__name__describe_get
+      parameters:
+      - description: Name of the repository to describe
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the repository to describe
+          examples:
+            ansible-roles:
+              description: Get detailed description of an Ansible roles repository
+              summary: Ansible Roles Repository
+              value: ansible-roles
+            terraform-modules:
+              description: Get detailed description of a Terraform modules repository
+              summary: Terraform Modules Repository
+              value: terraform-modules
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Describe Repository Detail V1 Repositories  Name  Describe
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get detailed repository description
+      tags:
+      - repositories
+  /v1/secrets/:
+    get:
+      description: "Get all registered torero secrets with optional filtering.\n \
+        \   \n    This endpoint returns a list of all secrets registered with torero.\n\
+        \    You can filter the results by secret type to narrow down the list.\n\
+        \    \n    Examples:\n    - List all secrets: GET /v1/secrets/\n    - List\
+        \ all password secrets: GET /v1/secrets/?type=password\n    - List all API\
+        \ key secrets: GET /v1/secrets/?type=api-key"
+      operationId: list_secrets_v1_secrets__get
+      parameters:
+      - description: Filter by secret type, e.g. 'password', 'api-key', 'token'
+        in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by secret type, e.g. 'password', 'api-key', 'token'
+          title: Type
+      - description: Number of items to skip
+        in: query
+        name: skip
+        required: false
+        schema:
+          default: 0
+          description: Number of items to skip
+          minimum: 0
+          title: Skip
+          type: integer
+      - description: Maximum number of items to return
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          description: Maximum number of items to return
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Secret'
+                title: Response List Secrets V1 Secrets  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List secrets
+      tags:
+      - secrets
+  /v1/secrets/types:
+    get:
+      description: "Return a list of unique secret types used by registered secrets.\n\
+        \    \n    This endpoint provides a list of all distinct secret types (e.g.,\
+        \ password, api-key, token) \n    that are currently in use across all registered\
+        \ secrets.\n    \n    This information is useful for:\n    - Building UI dropdown\
+        \ filters\n    - Understanding what types of secrets are available\n    -\
+        \ Validating type values for new secrets"
+      operationId: list_secret_types_v1_secrets_types_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Secret Types V1 Secrets Types Get
+                type: array
+          description: Successful Response
+      summary: List secret types
+      tags:
+      - secrets
+  /v1/secrets/{name}:
+    get:
+      description: "Get detailed information about a specific secret by name.\n  \
+        \  \n    This endpoint retrieves metadata about a single secret identified\
+        \ by its name.\n    The name is case-sensitive and must match exactly the\
+        \ name of a registered secret.\n    \n    Note: For security reasons, this\
+        \ endpoint only returns metadata about the secret,\n    not the actual secret\
+        \ value.\n    \n    If no secret is found with the specified name, a 404 error\
+        \ is returned."
+      operationId: get_secret_v1_secrets__name__get
+      parameters:
+      - description: Name of the secret to retrieve
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the secret to retrieve
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get secret details
+      tags:
+      - secrets
+  /v1/secrets/{name}/describe:
+    get:
+      description: "Get detailed description of a specific secret by name.\n    \n\
+        \    This endpoint returns comprehensive information about a secret,\n   \
+        \ including all configuration details and metadata. Note that the actual\n\
+        \    secret value is not returned for security reasons.\n    \n    The name\
+        \ is case-sensitive and must match exactly the name of a registered secret.\n\
+        \    \n    If no secret is found with the specified name, a 404 error is returned."
+      operationId: describe_secret_detail_v1_secrets__name__describe_get
+      parameters:
+      - description: Name of the secret to describe
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the secret to describe
+          examples:
+            api-token:
+              description: Get detailed description of an API token secret
+              summary: API Token
+              value: api-token
+            ssh-key:
+              description: Get detailed description of an SSH key secret
+              summary: SSH Key
+              value: ssh-key
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Describe Secret Detail V1 Secrets  Name  Describe
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get detailed secret description
+      tags:
+      - secrets
+  /v1/services/:
+    get:
+      description: "Get all registered torero services with optional filtering.\n\
+        \    \n    This endpoint returns a list of all services registered with torero.\n\
+        \    You can filter the results by service type and/or tag to narrow down\n\
+        \    the list to specific services of interest.\n    \n    Examples:\n   \
+        \ - List all services: GET /v1/services/\n    - List all ansible playbooks:\
+        \ GET /v1/services/?type=ansible-playbook\n    - List services with \"network\"\
+        \ tag: GET /v1/services/?tag=network\n    - Combine filters: GET /v1/services/?type=ansible-playbook&tag=network"
+      operationId: list_services_v1_services__get
+      parameters:
+      - description: Filter by service type, e.g. 'ansible-playbook'
+        in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - ansible-playbook
+            - opentofu-plan
+            - python-script
+            type: string
+          - type: 'null'
+          description: Filter by service type, e.g. 'ansible-playbook'
+          examples:
+            ansible-playbook:
+              description: Filter for only Ansible Playbook services
+              summary: Ansible Playbook
+              value: ansible-playbook
+            opentofu-plan:
+              description: Filter for only OpenTofu Plan services
+              summary: OpenTofu Plan
+              value: opentofu-plan
+            python-script:
+              description: Filter for only Python Script services
+              summary: Python Script
+              value: python-script
+          title: Type
+      - description: Filter by tag (e.g., 'network', 'backup')
+        in: query
+        name: tag
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by tag (e.g., 'network', 'backup')
+          examples:
+            automation:
+              description: Filter services with the 'automation' tag
+              summary: Automation Tag
+              value: automation
+            backup:
+              description: Filter services with the 'backup' tag
+              summary: Backup Tag
+              value: backup
+            network:
+              description: Filter services with the 'network' tag
+              summary: Network Tag
+              value: network
+          title: Tag
+      - description: Number of items to skip
+        in: query
+        name: skip
+        required: false
+        schema:
+          default: 0
+          description: Number of items to skip
+          minimum: 0
+          title: Skip
+          type: integer
+      - description: Maximum number of items to return
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          description: Maximum number of items to return
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Service'
+                title: Response List Services V1 Services  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List services
+      tags:
+      - services
+  /v1/services/tags:
+    get:
+      description: "Return a list of unique tags used across all registered services.\n\
+        \    \n    This endpoint provides a list of all distinct tags that are currently\
+        \ \n    applied to registered services. Services can have multiple tags, and\
+        \ \n    this endpoint aggregates them into a single, deduplicated list.\n\
+        \    \n    This information is useful for:\n    - Building tag clouds or filter\
+        \ interfaces\n    - Understanding how services are categorized\n    - Discovering\
+        \ available service categories"
+      operationId: list_service_tags_v1_services_tags_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Service Tags V1 Services Tags Get
+                type: array
+          description: Successful Response
+      summary: List service tags
+      tags:
+      - services
+  /v1/services/types:
+    get:
+      description: "Return a list of unique service types used by registered services.\n\
+        \    \n    This endpoint provides a list of all distinct service types (e.g.,\
+        \ ansible-playbook, \n    opentofu-plan, python-script) that are currently\
+        \ in use across all registered services.\n    \n    This information is useful\
+        \ for:\n    - Building UI dropdown filters\n    - Understanding what types\
+        \ of services are available\n    - Validating type values for new services"
+      operationId: list_service_types_v1_services_types_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                title: Response List Service Types V1 Services Types Get
+                type: array
+          description: Successful Response
+      summary: List service types
+      tags:
+      - services
+  /v1/services/{name}:
+    get:
+      description: "Get detailed information about a specific service by name.\n \
+        \   \n    This endpoint retrieves detailed information about a single service\n\
+        \    identified by its name. The name is case-sensitive and must match\n \
+        \   exactly the name of a registered service.\n    \n    If no service is\
+        \ found with the specified name, a 404 error is returned."
+      operationId: get_service_v1_services__name__get
+      parameters:
+      - description: Name of the service to retrieve
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the service to retrieve
+          examples:
+            app-deployment:
+              description: Get details for an application deployment service
+              summary: Application Deployment Service
+              value: app-deployment
+            network-backup:
+              description: Get details for a network backup service
+              summary: Network Backup Service
+              value: network-backup
+            system-monitor:
+              description: Get details for a system monitoring service
+              summary: System Monitoring Service
+              value: system-monitor
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get service details
+      tags:
+      - services
+  /v1/services/{name}/describe:
+    get:
+      description: "Get comprehensive detailed description of a specific service by\
+        \ name.\n    \n    This endpoint uses 'torero describe service' to retrieve\
+        \ extensive\n    information about a service including metadata, entity details,\
+        \ \n    playbook options, and configuration.\n    \n    If no service is found\
+        \ with the specified name, a 404 error is returned."
+      operationId: describe_service_endpoint_v1_services__name__describe_get
+      parameters:
+      - description: Name of the service to describe
+        in: path
+        name: name
+        required: true
+        schema:
+          description: Name of the service to describe
+          examples:
+            cisco-nxos-vlan-config:
+              description: Get detailed description for VLAN configuration service
+              summary: Cisco NXOS VLAN Config Service
+              value: cisco-nxos-vlan-config
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get detailed service description
+      tags:
+      - services
