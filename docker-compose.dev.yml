@@ -1,0 +1,29 @@
+---
+services:
+  torero:
+    build: .
+    image: torero-local
+    container_name: torero
+    ports:
+      - "22:22"
+      - "8000:8000"
+      - "8001:8001"
+      - "8080:8080"
+    volumes:
+      - ./data:/home/admin/data
+    environment:
+      - ENABLE_API=true
+      - API_PORT=8000
+      - ENABLE_UI=true
+      - UI_PORT=8001
+      - UI_REFRESH_INTERVAL=15
+      - ENABLE_MCP=true
+      - ENABLE_SSH_ADMIN=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "torero", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+...
