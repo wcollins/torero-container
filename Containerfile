@@ -1,4 +1,4 @@
-# Use official Python slim image as base
+# use official python slim image as base
 ARG PYTHON_VERSION=3.13.0
 ARG OPENTOFU_VERSION=1.10.5
 
@@ -74,7 +74,7 @@ RUN CONTAINER_BUILD_MODE=true python torero_ui/manage.py migrate && \
     CONTAINER_BUILD_MODE=true python torero_ui/manage.py collectstatic --noinput
 WORKDIR /
 
-# Install curl, unzip, and supervisor for runtime OpenTofu installation and service management
+# runtime packages
 RUN apt-get update && apt-get install -y curl unzip supervisor && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
