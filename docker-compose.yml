@@ -4,20 +4,20 @@ services:
     image: ghcr.io/torerodev/torero-container:latest
     container_name: torero
     ports:
-      - "22:22"                 # use when ENABLE_SSH_ADMIN=true
-      - "8000:8000"             # use when ENABLE_API=true
-      - "8001:8001"             # use when ENABLE_UI=true
-      - "8080:8080"             # use when ENABLE_MCP=true
+      - "22:22"
+      - "8000:8000"
+      - "8001:8001"
+      - "8080:8080"
     volumes:
       - ./data:/home/admin/data
     environment:
-      - ENABLE_API=true         # enable and run torero api
-      - API_PORT=8000           # api port
-      - ENABLE_UI=true          # enable torero-ui dashboard
-      - UI_PORT=8001            # dashboard port
-      - UI_REFRESH_INTERVAL=15  # faster refresh for demo
-      - ENABLE_MCP=true         # enable torero-mcp server
-      - ENABLE_SSH_ADMIN=true   # enable ssh admin at runtime
+      - ENABLE_API=true
+      - API_PORT=8000
+      - ENABLE_UI=true
+      - UI_PORT=8001
+      - UI_REFRESH_INTERVAL=15
+      - ENABLE_MCP=true
+      - ENABLE_SSH_ADMIN=true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "torero", "version"]
