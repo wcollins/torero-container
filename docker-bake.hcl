@@ -1,5 +1,4 @@
-// Docker Buildx Bake config / optimized multi-arch builds
-
+// docker buildx bake config / optimized multi-arch builds
 variable "TORERO_VERSION" {
   default = "1.3.1"
 }
@@ -73,7 +72,7 @@ target "dev" {
   ]
 }
 
-// PR validation build
+// pr validation build
 target "pr" {
   inherits = ["default"]
   platforms = ["linux/amd64"]
