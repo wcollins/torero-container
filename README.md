@@ -12,8 +12,8 @@ Container image for [torero](https://torero.dev), built using vendor-neutral Con
 - Includes _torero_ installed and ready to go
 - Optional [OpenTofu](https://opentofu.org/) installation at runtime
 - Optional SSH administration for testing convenience + labs
-- Optional [torero-api](https://github.com/torerodev/torero-api) launcher for API access
-- Optional [torero-mcp](https://github.com/torerodev/torero-mcp) launcher for Model Context Protocol server
+- Integrated torero-api service for REST API access
+- Integrated torero-mcp service for Model Context Protocol server
 
 ## Inspiration
 Managing and automating a hybrid, _multi-vendor_ infrastrcuture that encompasses _on-premises systems, private and public clouds, edge computing, and colocation environments_ poses significant challenges. How can you experiment to _learn_ without breaking things? How can you test new and innovative products like _torero_ on the test bench without friction to help in your evaluation? How do you test the behavior of changes in lower level environments before making changes to production? I use [containerlab](https://containerlab.dev/) for all of the above! This project makes it easy to insert _torero_ in your _containerlab_ topology file, connect to the container, and run your experiments -- the sky is the limit!
@@ -72,27 +72,29 @@ The following environment variables can be set at runtime:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ENABLE_API`       | `false`  | Enable torero API       |
-| `API_PORT`         | `8000`   | Set API port            |
-| `ENABLE_MCP`       | `false`  | Enable torero MCP server|
-| `ENABLE_SSH_ADMIN` | `false`  | Enable SSH admin user   |
-| `OPENTOFU_VERSION`     | `1.10.5` | Override OpenTofu version at runtime |
-| `PYTHON_VERSION`   | `3.13.0` | Set Python version      |
+| `ENABLE_API`       | `false`  | Enable torero API          |
+| `API_PORT`         | `8000`   | Set API port               |
+| `ENABLE_UI`        | `false`  | Enable torero UI           |
+| `UI_PORT`          | `8001`   | Set UI port                |
+| `ENABLE_MCP`       | `false`  | Enable torero MCP server   |
+| `ENABLE_SSH_ADMIN` | `false`  | Enable SSH admin user      |
+| `OPENTOFU_VERSION` | `1.10.5` | Override OpenTofu version  |
+| `PYTHON_VERSION`   | `3.13.0` | Set Python version         |
 
 #### MCP Server Environment Variables
 When `ENABLE_MCP=true`, the following additional environment variables are available:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TORERO_MCP_TRANSPORT_TYPE` | `sse` | MCP transport type |
-| `TORERO_MCP_TRANSPORT_HOST` | `0.0.0.0` | MCP server host |
-| `TORERO_MCP_TRANSPORT_PORT` | `8080` | MCP server port |
-| `TORERO_MCP_TRANSPORT_PATH` | `/sse` | SSE endpoint path |
-| `TORERO_API_BASE_URL` | `http://localhost:8000` | torero API base URL |
-| `TORERO_API_TIMEOUT` | `30` | API request timeout in seconds |
-| `TORERO_LOG_LEVEL` | `INFO` | Logging level |
-| `TORERO_MCP_PID_FILE` | `/tmp/torero-mcp.pid` | PID file location |
-| `TORERO_MCP_LOG_FILE` | `/home/admin/.torero-mcp.log` | Log file path |
+| `TORERO_MCP_TRANSPORT_TYPE` | `sse`                         | MCP transport type              |
+| `TORERO_MCP_TRANSPORT_HOST` | `0.0.0.0`                     | MCP server host                 |
+| `TORERO_MCP_TRANSPORT_PORT` | `8080`                        | MCP server port                 |
+| `TORERO_MCP_TRANSPORT_PATH` | `/sse`                        | SSE endpoint path               |
+| `TORERO_API_BASE_URL`       | `http://localhost:8000`       | torero API base URL             |
+| `TORERO_API_TIMEOUT`        | `30`                          | API request timeout in seconds  |
+| `TORERO_LOG_LEVEL`          | `INFO`                        | Logging level                   |
+| `TORERO_MCP_PID_FILE`       | `/tmp/torero-mcp.pid`         | PID file location               |
+| `TORERO_MCP_LOG_FILE`       | `/home/admin/.torero-mcp.log` | Log file path                   |
 
 ### OpenTofu Version Management
 The container comes with OpenTofu 1.10.5 (latest stable) pre-installed at build time. You can override this at runtime using the `OPENTOFU_VERSION` environment variable:
@@ -111,42 +113,38 @@ services:
 
 The container will automatically download and install the requested version at startup if it differs from the pre-installed version. If no `OPENTOFU_VERSION` is specified, it uses the pre-installed version (1.10.5).
 
-## CLI runner script
-The _cli-runner.sh_ script provides a convenient way to run, test, and do house cleaning locally when running on your workstation. I use it for quick and dirty testing 🚀
+## Local Development
+
+### Using docker-compose for local testing
 
 ```bash
-# build + run
-./cli-runner.sh --build --run
+# start all services with development configuration
+docker-compose -f docker-compose.dev.yml up -d
 
-# run and immediately ssh into container
-./cli-runner.sh --run --ssh
+# stop services
+docker-compose -f docker-compose.dev.yml down
 
-# run with torero-api enabled on default port 8000
-./cli-runner.sh --run --enable-api
-
-# run with torero-api on custom port
-./cli-runner.sh --run --enable-api --api-port 8001
-
-# run with torero-mcp enabled on default port 8080
-./cli-runner.sh --run --enable-mcp
-
-# run with torero-mcp on custom port
-./cli-runner.sh --run --enable-mcp --mcp-port 9080
-
-# check status
-./cli-runner.sh --status
-
-# stop container
-./cli-runner.sh --stop
-
-# start a stopped container
-./cli-runner.sh --start
+# rebuild and start
+docker-compose -f docker-compose.dev.yml up --build -d
 
 # view logs
-./cli-runner.sh --logs
+docker-compose -f docker-compose.dev.yml logs -f
 
-# clean up everything (will prompt before deleting local data)
-./cli-runner.sh --clean
+# clean up everything
+docker-compose -f docker-compose.dev.yml down -v
+```
+
+### Using tools.sh for development tasks
+
+```bash
+# setup development environment
+./tools.sh --setup
+
+# run tests with coverage
+./tools.sh --test
+
+# generate openapi schema
+./tools.sh --schema
 ```
 
 ## Container Architecture
