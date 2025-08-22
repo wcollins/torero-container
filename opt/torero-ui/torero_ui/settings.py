@@ -86,9 +86,8 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# torero api configuration
-TORERO_API_BASE_URL = os.environ.get("TORERO_API_BASE_URL", "http://localhost:8000")
-TORERO_API_TIMEOUT = int(os.environ.get("TORERO_API_TIMEOUT", "30"))
+# torero cli configuration
+TORERO_CLI_TIMEOUT = int(os.environ.get("TORERO_CLI_TIMEOUT", "30"))
 
 # dashboard refresh interval in seconds
 DASHBOARD_REFRESH_INTERVAL = int(os.environ.get("UI_REFRESH_INTERVAL", "30"))

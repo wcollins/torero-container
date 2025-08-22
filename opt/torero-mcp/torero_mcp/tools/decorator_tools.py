@@ -1,85 +1,98 @@
-"""Decorator-related tools for torero MCP server."""
+"""decorator-related tools for torero mcp server."""
 
 import json
 import logging
 from typing import Any, Dict, Optional
 
-from ..client import ToreroAPIError, ToreroClient
+from ..executor import ToreroExecutorError, ToreroExecutor
 
 logger = logging.getLogger(__name__)
 
 
 async def list_decorators(
-    client: ToreroClient,
+    executor: ToreroExecutor,
     decorator_type: Optional[str] = None,
     service_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = 100
 ) -> str:
     """
-    List torero decorators with optional filtering.
+    list torero decorators with optional filtering.
     
-    Args:
-        client: ToreroClient instance
-        decorator_type: Filter by decorator type (e.g., 'authentication', 'logging')
-        service_type: Filter by applicable service type
-        tag: Filter by tag
-        limit: Maximum number of decorators to return (default: 100)
+    args:
+        executor: toreroexecutor instance
+        decorator_type: filter by decorator type (e.g., 'authentication', 'logging')
+        service_type: filter by applicable service type
+        tag: filter by tag
+        limit: maximum number of decorators to return (default: 100)
         
-    Returns:
-        JSON string containing list of decorators
+    returns:
+        json string containing list of decorators
     """
     try:
-        decorators = await client.list_decorators(
-            decorator_type=decorator_type,
-            service_type=service_type,
-            tag=tag,
-            limit=limit
-        )
+        decorators = await executor.get_decorators()
+        
+        # apply filters
+        if decorator_type:
+            decorators = [d for d in decorators if d.get('type') == decorator_type]
+        if service_type:
+            decorators = [d for d in decorators if service_type in d.get('service_types', [])]
+        if tag:
+            decorators = [d for d in decorators if tag in d.get('tags', [])]
+        
+        # apply limit
+        decorators = decorators[:limit]
+        
         return json.dumps(decorators, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing decorators: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing decorators: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_decorators")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_decorators")
+        return f"unexpected error: {e}"
 
 
-async def get_decorator(client: ToreroClient, name: str) -> str:
+async def get_decorator(executor: ToreroExecutor, name: str) -> str:
     """
-    Get detailed information about a specific torero decorator.
+    get detailed information about a specific torero decorator.
     
-    Args:
-        client: ToreroClient instance
-        name: Name of the decorator to retrieve
+    args:
+        executor: toreroexecutor instance
+        name: name of the decorator to retrieve
         
-    Returns:
-        JSON string containing decorator details
+    returns:
+        json string containing decorator details
     """
     try:
-        decorator = await client.get_decorator(name)
-        return json.dumps(decorator, indent=2)
-    except ToreroAPIError as e:
-        return f"Error getting decorator '{name}': {e}"
+        decorators = await executor.get_decorators()
+        decorator = next((d for d in decorators if d.get('name') == name), None)
+        
+        if decorator:
+            return json.dumps(decorator, indent=2)
+        else:
+            return f"decorator '{name}' not found"
+    except ToreroExecutorError as e:
+        return f"error getting decorator '{name}': {e}"
     except Exception as e:
-        logger.exception(f"Unexpected error getting decorator '{name}'")
-        return f"Unexpected error: {e}"
+        logger.exception(f"unexpected error getting decorator '{name}'")
+        return f"unexpected error: {e}"
 
 
-async def list_decorator_types(client: ToreroClient) -> str:
+async def list_decorator_types(executor: ToreroExecutor) -> str:
     """
-    Get all available decorator types.
+    get all available decorator types.
     
-    Args:
-        client: ToreroClient instance
+    args:
+        executor: toreroexecutor instance
     
-    Returns:
-        JSON string containing list of decorator types
+    returns:
+        json string containing list of decorator types
     """
     try:
-        types = await client.list_decorator_types()
+        decorators = await executor.get_decorators()
+        types = sorted(set(d.get('type', 'unknown') for d in decorators))
         return json.dumps(types, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing decorator types: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing decorator types: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_decorator_types")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_decorator_types")
+        return f"unexpected error: {e}"

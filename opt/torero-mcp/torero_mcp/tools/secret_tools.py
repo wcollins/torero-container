@@ -1,178 +1,107 @@
-"""Secret-related tools for torero MCP server."""
+"""secret-related tools for torero mcp server."""
 
 import json
 import logging
 from typing import Any, Dict, Optional
 
-from ..client import ToreroAPIError, ToreroClient
+from ..executor import ToreroExecutorError, ToreroExecutor
 
 logger = logging.getLogger(__name__)
 
 
 async def list_secrets(
-    client: ToreroClient,
+    executor: ToreroExecutor,
     secret_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = 100
 ) -> str:
     """
-    List torero secrets with optional filtering (metadata only).
+    list torero secrets with optional filtering (metadata only).
     
-    Args:
-        client: ToreroClient instance
-        secret_type: Filter by secret type (e.g., 'password', 'api-key', 'token')
-        tag: Filter by tag
-        limit: Maximum number of secrets to return (default: 100)
+    args:
+        executor: toreroexecutor instance
+        secret_type: filter by secret type (e.g., 'password', 'api-key', 'token')
+        tag: filter by tag
+        limit: maximum number of secrets to return (default: 100)
         
-    Returns:
-        JSON string containing list of secret metadata
+    returns:
+        json string containing list of secret metadata
     """
     try:
-        secrets = await client.list_secrets(
-            secret_type=secret_type,
-            tag=tag,
-            limit=limit
-        )
+        secrets = await executor.get_secrets()
+        
+        # apply filters
+        if secret_type:
+            secrets = [s for s in secrets if s.get('type') == secret_type]
+        if tag:
+            secrets = [s for s in secrets if tag in s.get('tags', [])]
+        
+        # apply limit
+        secrets = secrets[:limit]
+        
         return json.dumps(secrets, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing secrets: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing secrets: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_secrets")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_secrets")
+        return f"unexpected error: {e}"
 
 
-async def get_secret(client: ToreroClient, name: str, include_value: bool = False) -> str:
+async def get_secret(executor: ToreroExecutor, name: str, include_value: bool = False) -> str:
     """
-    Get detailed information about a specific torero secret.
+    get detailed information about a specific torero secret.
     
-    Args:
-        client: ToreroClient instance
-        name: Name of the secret to retrieve
-        include_value: Whether to include the secret value in the response
+    args:
+        executor: toreroexecutor instance
+        name: name of the secret to retrieve
+        include_value: whether to include the secret value (note: not supported via cli)
         
-    Returns:
-        JSON string containing secret metadata (and optionally value)
+    returns:
+        json string containing secret metadata
     """
     try:
-        secret = await client.get_secret(name, include_value=include_value)
-        return json.dumps(secret, indent=2)
-    except ToreroAPIError as e:
-        return f"Error getting secret '{name}': {e}"
+        secrets = await executor.get_secrets()
+        secret = next((s for s in secrets if s.get('name') == name), None)
+        
+        if secret:
+            if include_value:
+                # note: cli doesn't expose secret values for security
+                secret['note'] = 'secret values not exposed via cli for security'
+            return json.dumps(secret, indent=2)
+        else:
+            return f"secret '{name}' not found"
+    except ToreroExecutorError as e:
+        return f"error getting secret '{name}': {e}"
     except Exception as e:
-        logger.exception(f"Unexpected error getting secret '{name}'")
-        return f"Unexpected error: {e}"
+        logger.exception(f"unexpected error getting secret '{name}'")
+        return f"unexpected error: {e}"
 
 
-async def list_secret_types(client: ToreroClient) -> str:
+async def list_secret_types(executor: ToreroExecutor) -> str:
     """
-    Get all available secret types.
+    get all available secret types.
     
-    Args:
-        client: ToreroClient instance
+    args:
+        executor: toreroexecutor instance
     
-    Returns:
-        JSON string containing list of secret types
+    returns:
+        json string containing list of secret types
     """
     try:
-        types = await client.list_secret_types()
+        secrets = await executor.get_secrets()
+        types = sorted(set(s.get('type', 'unknown') for s in secrets))
         return json.dumps(types, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing secret types: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing secret types: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_secret_types")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_secret_types")
+        return f"unexpected error: {e}"
 
 
-async def create_secret(
-    client: ToreroClient, 
-    name: str, 
-    value: str, 
-    secret_type: str = "generic",
-    description: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None
-) -> str:
-    """
-    Create a new secret.
-    
-    Args:
-        client: ToreroClient instance
-        name: Name of the secret
-        value: Secret value
-        secret_type: Type of secret (default: "generic")
-        description: Optional description of the secret
-        metadata: Optional metadata dictionary
-        
-    Returns:
-        JSON string containing creation result
-    """
-    try:
-        kwargs = {}
-        if description is not None:
-            kwargs["description"] = description
-        if metadata is not None:
-            kwargs["metadata"] = metadata
-            
-        result = await client.create_secret(name, value, secret_type, **kwargs)
-        return json.dumps(result, indent=2)
-    except ToreroAPIError as e:
-        return f"Error creating secret '{name}': {e}"
-    except Exception as e:
-        logger.exception(f"Unexpected error creating secret '{name}'")
-        return f"Unexpected error: {e}"
-
-
-async def update_secret(
-    client: ToreroClient, 
-    name: str, 
-    value: Optional[str] = None,
-    description: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None
-) -> str:
-    """
-    Update a secret.
-    
-    Args:
-        client: ToreroClient instance
-        name: Name of the secret to update
-        value: New secret value (optional)
-        description: Updated description (optional)
-        metadata: Updated metadata dictionary (optional)
-        
-    Returns:
-        JSON string containing update result
-    """
-    try:
-        kwargs = {}
-        if description is not None:
-            kwargs["description"] = description
-        if metadata is not None:
-            kwargs["metadata"] = metadata
-            
-        result = await client.update_secret(name, value, **kwargs)
-        return json.dumps(result, indent=2)
-    except ToreroAPIError as e:
-        return f"Error updating secret '{name}': {e}"
-    except Exception as e:
-        logger.exception(f"Unexpected error updating secret '{name}'")
-        return f"Unexpected error: {e}"
-
-
-async def delete_secret(client: ToreroClient, name: str) -> str:
-    """
-    Delete a secret.
-    
-    Args:
-        client: ToreroClient instance
-        name: Name of the secret to delete
-        
-    Returns:
-        JSON string containing deletion result
-    """
-    try:
-        result = await client.delete_secret(name)
-        return json.dumps(result, indent=2)
-    except ToreroAPIError as e:
-        return f"Error deleting secret '{name}': {e}"
-    except Exception as e:
-        logger.exception(f"Unexpected error deleting secret '{name}'")
-        return f"Unexpected error: {e}"
+# note: the following functions require api-level secret management
+# which is not available through direct cli operations:
+# - create_secret (requires api-level creation)
+# - update_secret (requires api-level updates)
+# - delete_secret (requires api-level deletion)
+#
+# secret information access is available through the functions above
