@@ -1,4 +1,4 @@
-"""Configuration management for torero MCP server."""
+"""configuration management for torero mcp server."""
 
 import os
 import logging
@@ -9,49 +9,20 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 
-class AuthConfig(BaseModel):
-    """Authentication configuration."""
-    
-    type: str = Field(..., description="Authentication type (bearer, basic)")
-    token: Optional[str] = Field(None, description="Bearer token")
-    username: Optional[str] = Field(None, description="Basic auth username")
-    password: Optional[str] = Field(None, description="Basic auth password")
-    
-    @field_validator("type")
-    @classmethod
-    def validate_auth_type(cls, v: str) -> str:
-        """Validate authentication type."""
-        if v not in ["bearer", "basic"]:
-            raise ValueError("Auth type must be 'bearer' or 'basic'")
-        return v
-
-
-class APIConfig(BaseModel):
-    """API configuration."""
-    
-    base_url: str = Field(
-        default="http://localhost:8000",
-        description="Base URL for the torero API"
-    )
-    timeout: int = Field(default=30, description="Request timeout in seconds")
-    verify_ssl: bool = Field(default=True, description="Verify SSL certificates")
-    auth: Optional[AuthConfig] = Field(None, description="Authentication config")
-
-
 class LoggingConfig(BaseModel):
-    """Logging configuration."""
+    """Logging configuration for the MCP server."""
     
-    level: str = Field(default="INFO", description="Logging level")
+    level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        description="Log format"
+        description="Python logging format string"
     )
-    file: Optional[str] = Field(None, description="Log file path")
+    file: Optional[str] = Field(None, description="Optional log file path for file-based logging")
     
     @field_validator("level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
-        """Validate logging level."""
+        """Validate that the logging level is supported by Python's logging module."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
             raise ValueError(f"Log level must be one of: {valid_levels}")
@@ -59,64 +30,81 @@ class LoggingConfig(BaseModel):
 
 
 class TransportConfig(BaseModel):
-    """Transport configuration for MCP server."""
+    """Transport configuration for the MCP server communication layer."""
     
-    type: str = Field(default="stdio", description="Transport type: stdio, sse, or streamable_http")
-    host: str = Field(default="127.0.0.1", description="Host for SSE/HTTP transport")
-    port: int = Field(default=8000, description="Port for SSE/HTTP transport")
-    path: str = Field(default="/sse", description="SSE endpoint path")
+    type: str = Field(
+        default="stdio", 
+        description="Transport protocol: stdio for direct process communication, sse for Server-Sent Events, or streamable_http for HTTP streaming"
+    )
+    host: str = Field(default="127.0.0.1", description="Host address for network-based transports (sse, streamable_http)")
+    port: int = Field(default=8000, description="Network port for network-based transports (sse, streamable_http)")
+    path: str = Field(default="/sse", description="URL path for Server-Sent Events endpoint")
     
     @field_validator("type")
     @classmethod
     def validate_transport_type(cls, v: str) -> str:
-        """Validate transport type."""
+        """Validate that the transport type is one of the supported MCP transport protocols."""
         if v not in ["stdio", "sse", "streamable_http"]:
             raise ValueError("Transport type must be 'stdio', 'sse', or 'streamable_http'")
         return v
 
 
-class MCPConfig(BaseModel):
-    """MCP server configuration."""
+class ExecutorConfig(BaseModel):
+    """Configuration for the torero CLI executor."""
     
-    name: str = Field(default="torero", description="Server name")
-    version: str = Field(default="0.1.0", description="Server version")
-    transport: TransportConfig = Field(default_factory=TransportConfig, description="Transport configuration")
+    timeout: int = Field(default=30, description="Default timeout in seconds for torero CLI commands")
+    torero_command: str = Field(default="torero", description="Path or name of the torero CLI executable")
+
+
+class MCPConfig(BaseModel):
+    """Core MCP server configuration."""
+    
+    name: str = Field(default="torero", description="Name identifier for this MCP server instance")
+    version: str = Field(default="0.1.0", description="Version of this MCP server implementation")
+    transport: TransportConfig = Field(default_factory=TransportConfig, description="Transport layer configuration")
 
 
 class Config(BaseModel):
-    """Main configuration."""
+    """Main configuration object containing all server settings."""
     
-    api: APIConfig = Field(default_factory=APIConfig)
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    mcp: MCPConfig = Field(default_factory=MCPConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
+    mcp: MCPConfig = Field(default_factory=MCPConfig, description="MCP server configuration")
+    executor: ExecutorConfig = Field(default_factory=ExecutorConfig, description="torero CLI executor configuration")
 
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
     """
-    Load configuration from file and environment variables.
+    Load configuration from YAML file and environment variables.
+    
+    Environment variables take precedence over file configuration.
+    The configuration supports nested structures for organizing related settings.
     
     Args:
-        config_path: Path to configuration file
+        config_path: Optional path to a YAML configuration file. If None, only environment variables are used.
         
     Returns:
-        Config: Loaded configuration
+        Config: A validated configuration object with all settings loaded and validated.
+        
+    Environment Variables:
+        - TORERO_LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        - TORERO_LOG_FILE: Path to log file (optional)
+        - TORERO_MCP_TRANSPORT_TYPE: Transport type (stdio, sse, streamable_http)
+        - TORERO_MCP_TRANSPORT_HOST: Host for network transports
+        - TORERO_MCP_TRANSPORT_PORT: Port for network transports
+        - TORERO_MCP_TRANSPORT_PATH: Path for SSE endpoint
+        - TORERO_CLI_TIMEOUT: Timeout for torero CLI commands in seconds
     """
     config_data: Dict[str, Any] = {}
     
-    # Load from file if provided
+    # load from yaml file if provided
     if config_path:
         config_file = Path(config_path)
         if config_file.exists():
             with open(config_file, "r", encoding="utf-8") as f:
                 config_data = yaml.safe_load(f) or {}
     
-    # Override with environment variables
+    # override with environment variables
     env_overrides = {
-        "api": {
-            "base_url": os.getenv("TORERO_API_BASE_URL"),
-            "timeout": os.getenv("TORERO_API_TIMEOUT"),
-            "verify_ssl": os.getenv("TORERO_API_VERIFY_SSL"),
-        },
         "logging": {
             "level": os.getenv("TORERO_LOG_LEVEL"),
             "file": os.getenv("TORERO_LOG_FILE"),
@@ -128,10 +116,14 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
                 "port": os.getenv("TORERO_MCP_TRANSPORT_PORT"),
                 "path": os.getenv("TORERO_MCP_TRANSPORT_PATH"),
             }
+        },
+        "executor": {
+            "timeout": os.getenv("TORERO_CLI_TIMEOUT"),
+            "torero_command": os.getenv("TORERO_CLI_COMMAND"),
         }
     }
     
-    # Merge environment overrides
+    # merge environment overrides into config data
     for section, values in env_overrides.items():
         if section not in config_data:
             config_data[section] = {}
@@ -139,21 +131,19 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
         if isinstance(values, dict):
             for key, value in values.items():
                 if isinstance(value, dict):
-                    # Handle nested config like transport
+                    # handle nested config like transport
                     if key not in config_data[section]:
                         config_data[section][key] = {}
                     for sub_key, sub_value in value.items():
                         if sub_value is not None:
-                            # Convert string values to appropriate types
-                            if sub_key == "port":
+                            # convert string values to appropriate types
+                            if sub_key == "port" or sub_key == "timeout":
                                 sub_value = int(sub_value)
                             config_data[section][key][sub_key] = sub_value
                 elif value is not None:
-                    # Convert string values to appropriate types
+                    # convert string values to appropriate types
                     if key == "timeout":
                         value = int(value)
-                    elif key == "verify_ssl":
-                        value = value.lower() in ("true", "1", "yes", "on")
                     config_data[section][key] = value
     
     return Config(**config_data)
@@ -161,12 +151,15 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> Config:
 
 def setup_logging(config: LoggingConfig) -> None:
     """
-    Set up logging based on configuration.
+    Configure Python logging based on the provided logging configuration.
+    
+    Sets up console and/or file logging with the specified format and level.
+    Also configures third-party library logging to reduce noise.
     
     Args:
-        config: Logging configuration
+        config: LoggingConfig object containing logging preferences including level, format, and optional file output.
     """
-    # Configure logging
+    # configure main logging
     log_config = {
         "level": getattr(logging, config.level),
         "format": config.format,
@@ -178,5 +171,6 @@ def setup_logging(config: LoggingConfig) -> None:
     
     logging.basicConfig(**log_config)
     
-    # Set httpx logging to WARNING to reduce noise
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # reduce noise from third-party libraries
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)

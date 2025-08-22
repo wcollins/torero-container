@@ -1,144 +1,161 @@
-"""Service-related tools for torero MCP server."""
+"""service-related tools for torero mcp server."""
 
 import json
 import logging
 from typing import Any, Dict, Optional
 
-from ..client import ToreroAPIError, ToreroClient
+from ..executor import ToreroExecutorError, ToreroExecutor
 
 logger = logging.getLogger(__name__)
 
 
 async def list_services(
-    client: ToreroClient,
+    executor: ToreroExecutor,
     service_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = 100
 ) -> str:
     """
-    List torero services with optional filtering.
+    list torero services with optional filtering.
     
-    Args:
-        client: ToreroClient instance
-        service_type: Filter by service type (e.g., 'ansible-playbook', 'opentofu-plan', 'python-script')
-        tag: Filter by tag (e.g., 'network', 'backup', 'automation')
-        limit: Maximum number of services to return (default: 100)
+    args:
+        executor: toreroexecutor instance
+        service_type: filter by service type (e.g., 'ansible-playbook', 'opentofu-plan', 'python-script')
+        tag: filter by tag (e.g., 'network', 'backup', 'automation')
+        limit: maximum number of services to return (default: 100)
         
-    Returns:
-        JSON string containing list of services
+    returns:
+        json string containing list of services
     """
     try:
-        services = await client.list_services(
-            service_type=service_type,
-            tag=tag,
-            limit=limit
-        )
+        services = await executor.get_services()
+        
+        # apply filters
+        if service_type:
+            services = [s for s in services if s.get('type') == service_type]
+        if tag:
+            services = [s for s in services if tag in s.get('tags', [])]
+        
+        # apply limit
+        services = services[:limit]
+        
         return json.dumps(services, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing services: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing services: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_services")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_services")
+        return f"unexpected error: {e}"
 
 
-async def get_service(client: ToreroClient, name: str) -> str:
+async def get_service(executor: ToreroExecutor, name: str) -> str:
     """
-    Get detailed information about a specific torero service.
+    get detailed information about a specific torero service.
     
-    Args:
-        client: ToreroClient instance
-        name: Name of the service to retrieve
+    args:
+        executor: toreroexecutor instance
+        name: name of the service to retrieve
         
-    Returns:
-        JSON string containing service details
+    returns:
+        json string containing service details
     """
     try:
-        service = await client.get_service(name)
-        return json.dumps(service, indent=2)
-    except ToreroAPIError as e:
-        return f"Error getting service '{name}': {e}"
+        service = await executor.get_service_by_name(name)
+        if service:
+            return json.dumps(service, indent=2)
+        else:
+            return f"service '{name}' not found"
+    except ToreroExecutorError as e:
+        return f"error getting service '{name}': {e}"
     except Exception as e:
-        logger.exception(f"Unexpected error getting service '{name}'")
-        return f"Unexpected error: {e}"
+        logger.exception(f"unexpected error getting service '{name}'")
+        return f"unexpected error: {e}"
 
 
-async def describe_service(client: ToreroClient, name: str) -> str:
+async def describe_service(executor: ToreroExecutor, name: str) -> str:
     """
-    Get complete and detailed description of a specific torero service.
+    get complete and detailed description of a specific torero service.
     
-    Args:
-        client: ToreroClient instance
-        name: Name of the service to describe
+    args:
+        executor: toreroexecutor instance
+        name: name of the service to describe
         
-    Returns:
-        JSON string containing detailed service description
+    returns:
+        json string containing detailed service description
     """
     try:
-        description = await client.describe_service(name)
-        return json.dumps(description, indent=2)
-    except ToreroAPIError as e:
-        return f"Error describing service '{name}': {e}"
+        description = await executor.describe_service(name)
+        if description:
+            return json.dumps(description, indent=2)
+        else:
+            return f"service '{name}' description not available"
+    except ToreroExecutorError as e:
+        return f"error describing service '{name}': {e}"
     except Exception as e:
-        logger.exception(f"Unexpected error describing service '{name}'")
-        return f"Unexpected error: {e}"
+        logger.exception(f"unexpected error describing service '{name}'")
+        return f"unexpected error: {e}"
 
 
-async def list_service_types(client: ToreroClient) -> str:
+async def list_service_types(executor: ToreroExecutor) -> str:
     """
-    Get all available service types.
+    get all available service types.
     
-    Args:
-        client: ToreroClient instance
+    args:
+        executor: toreroexecutor instance
     
-    Returns:
-        JSON string containing list of service types
+    returns:
+        json string containing list of service types
     """
     try:
-        types = await client.list_service_types()
+        services = await executor.get_services()
+        types = sorted(set(s.get('type', 'unknown') for s in services))
         return json.dumps(types, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing service types: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing service types: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_service_types")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_service_types")
+        return f"unexpected error: {e}"
 
 
-async def list_service_tags(client: ToreroClient) -> str:
+async def list_service_tags(executor: ToreroExecutor) -> str:
     """
-    Get all available service tags.
+    get all available service tags.
     
-    Args:
-        client: ToreroClient instance
+    args:
+        executor: toreroexecutor instance
     
-    Returns:
-        JSON string containing list of service tags
+    returns:
+        json string containing list of service tags
     """
     try:
-        tags = await client.list_service_tags()
+        services = await executor.get_services()
+        tags = sorted(set(tag for s in services for tag in s.get('tags', [])))
         return json.dumps(tags, indent=2)
-    except ToreroAPIError as e:
-        return f"Error listing service tags: {e}"
+    except ToreroExecutorError as e:
+        return f"error listing service tags: {e}"
     except Exception as e:
-        logger.exception("Unexpected error in list_service_tags")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in list_service_tags")
+        return f"unexpected error: {e}"
 
 
-async def get_service_description(client: ToreroClient, name: str) -> str:
+async def get_service_description(executor: ToreroExecutor, name: str) -> str:
     """
-    Get detailed description of a specific torero service.
+    get detailed description of a specific torero service.
     
-    Args:
-        client: ToreroClient instance
-        name: Name of the service to get description for
+    args:
+        executor: toreroexecutor instance
+        name: name of the service to get description for
         
-    Returns:
-        JSON string containing service description
+    returns:
+        json string containing service description
     """
     try:
-        description = await client.get_service_description(name)
-        return json.dumps(description, indent=2)
-    except ToreroAPIError as e:
-        return f"Error getting service description for '{name}': {e}"
+        description = await executor.describe_service(name)
+        if description:
+            return json.dumps(description, indent=2)
+        else:
+            return f"service '{name}' description not available"
+    except ToreroExecutorError as e:
+        return f"error getting service description for '{name}': {e}"
     except Exception as e:
-        logger.exception(f"Unexpected error getting service description for '{name}'")
-        return f"Unexpected error: {e}"
+        logger.exception(f"unexpected error getting service description for '{name}'")
+        return f"unexpected error: {e}"

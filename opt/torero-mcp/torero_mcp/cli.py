@@ -38,11 +38,6 @@ def cli() -> None:
     help="Override logging level"
 )
 @click.option(
-    "--api-url",
-    envvar="TORERO_API_BASE_URL",
-    help="torero API base URL (overrides config)"
-)
-@click.option(
     "--transport",
     type=click.Choice(["stdio", "sse", "streamable_http"]),
     envvar="TORERO_MCP_TRANSPORT_TYPE",
@@ -85,7 +80,6 @@ def cli() -> None:
 def run(
     config: Optional[Path] = None,
     log_level: Optional[str] = None,
-    api_url: Optional[str] = None,
     transport: Optional[str] = None,
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -108,8 +102,6 @@ def run(
         # Override with CLI args
         if log_level:
             app_config.logging.level = log_level
-        if api_url:
-            app_config.api.base_url = api_url
         
         # Override transport settings
         if transport:
@@ -210,7 +202,6 @@ def _run_server(app_config: Config) -> None:
     
     logger.info(f"Starting torero MCP server v{__version__}")
     logger.info(f"Configuration loaded from: {app_config}")
-    logger.debug(f"API URL: {app_config.api.base_url}")
     logger.debug(f"Log level: {app_config.logging.level}")
     logger.debug(f"Transport type: {app_config.mcp.transport.type}")
     if app_config.mcp.transport.type in ["sse", "streamable_http"]:
@@ -243,12 +234,12 @@ def init_config(output: Path) -> None:
     
     config_content = """# torero MCP Server Configuration
 
-api:
-  # Base URL for the torero API
-  base_url: "http://localhost:8000"
-  
-  # Request timeout in seconds
+executor:
+  # CLI command timeout in seconds
   timeout: 30
+  
+  # torero command path (default: torero)
+  torero_command: "torero"
   
 logging:
   # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -298,48 +289,37 @@ mcp:
     type=click.Path(exists=True, path_type=Path),
     help="Path to configuration file"
 )
-@click.option(
-    "--api-url",
-    envvar="TORERO_API_BASE_URL",
-    help="torero API base URL (overrides config)"
-)
 def test_connection(
     config: Optional[Path] = None,
-    api_url: Optional[str] = None,
 ) -> None:
-    """Test connection to torero API."""
+    """Test connection to torero CLI."""
     
     async def _test() -> None:
-        from .client import ToreroClient, ToreroAPIError
+        from .executor import ToreroExecutor
         
         # Load config
         app_config = load_config(config)
         
-        # Override with CLI args
-        if api_url:
-            app_config.api.base_url = api_url
-        
         # Setup basic logging
         logging.basicConfig(level=logging.INFO)
         
-        click.echo(f"Testing connection to: {app_config.api.base_url}")
+        click.echo("Testing torero CLI connection...")
         
         try:
-            async with ToreroClient(app_config.api) as client:
-                health = await client.health_check()
-                click.echo("✓ Connection successful!")
-                click.echo(f"API Status: {health.get('status', 'unknown')}")
-                
-                # Test listing services
-                try:
-                    services = await client.list_services(limit=1)
-                    click.echo(f"✓ API functional - found {len(services)} service(s)")
-                except Exception as e:
-                    click.echo(f"⚠ API connection OK but listing services failed: {e}")
+            executor = ToreroExecutor(timeout=app_config.executor.timeout)
+            
+            # Test version command
+            version = await executor.execute_command(["version"], parse_json=False)
+            click.echo("✓ Connection successful!")
+            click.echo(f"torero version: {version}")
+            
+            # Test listing services
+            try:
+                services = await executor.get_services()
+                click.echo(f"✓ CLI functional - found {len(services)} service(s)")
+            except Exception as e:
+                click.echo(f"⚠ CLI connection OK but listing services failed: {e}")
                     
-        except ToreroAPIError as e:
-            click.echo(f"✗ API Error: {e}")
-            sys.exit(1)
         except Exception as e:
             click.echo(f"✗ Connection failed: {e}")
             sys.exit(1)

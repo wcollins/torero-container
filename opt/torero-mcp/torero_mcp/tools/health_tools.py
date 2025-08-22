@@ -1,49 +1,66 @@
-"""Health check tools for torero MCP server."""
+"""health check tools for torero mcp server."""
 
 import json
 import logging
 from typing import Any, Dict
 
-from ..client import ToreroAPIError, ToreroClient
+from ..executor import ToreroExecutorError, ToreroExecutor
 
 logger = logging.getLogger(__name__)
 
 
-async def health_check(client: ToreroClient) -> str:
+async def health_check(executor: ToreroExecutor) -> str:
     """
-    Check the health of the torero API.
+    check the health of the torero cli.
     
-    Args:
-        client: ToreroClient instance
+    args:
+        executor: toreroexecutor instance
     
-    Returns:
-        JSON string containing health status
+    returns:
+        json string containing health status
     """
     try:
-        health = await client.health_check()
-        return json.dumps(health, indent=2)
-    except ToreroAPIError as e:
-        return f"Error checking health: {e}"
-    except Exception as e:
-        logger.exception("Unexpected error in health_check")
-        return f"Unexpected error: {e}"
-
-
-async def get_system_info(client: ToreroClient) -> str:
-    """
-    Get system information from the torero API.
-    
-    Args:
-        client: ToreroClient instance
+        is_available, message = executor.check_torero_available()
+        version = executor.check_torero_version()
         
-    Returns:
-        JSON string containing system information
+        return json.dumps({
+            "status": "healthy" if is_available else "unhealthy",
+            "torero_available": is_available,
+            "torero_version": version,
+            "message": message
+        }, indent=2)
+    except Exception as e:
+        logger.exception("unexpected error in health_check")
+        return json.dumps({
+            "status": "unhealthy",
+            "torero_available": False,
+            "error": f"unexpected error: {e}"
+        }, indent=2)
+
+
+async def get_torero_version(executor: ToreroExecutor) -> str:
+    """
+    get torero version information.
+    
+    args:
+        executor: toreroexecutor instance
+        
+    returns:
+        json string containing version information
     """
     try:
-        info = await client.get_system_info()
-        return json.dumps(info, indent=2)
-    except ToreroAPIError as e:
-        return f"Error getting system info: {e}"
+        version = executor.check_torero_version()
+        is_available, message = executor.check_torero_available()
+        
+        return json.dumps({
+            "version": version,
+            "available": is_available,
+            "message": message
+        }, indent=2)
     except Exception as e:
-        logger.exception("Unexpected error in get_system_info")
-        return f"Unexpected error: {e}"
+        logger.exception("unexpected error in get_torero_version")
+        return json.dumps({
+            "version": "unknown",
+            "available": False,
+            "error": f"unexpected error: {e}"
+        }, indent=2)

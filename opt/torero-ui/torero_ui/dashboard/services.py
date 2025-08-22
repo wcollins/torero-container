@@ -1,11 +1,11 @@
-"""services for interacting with torero api."""
+"""services for interacting with torero cli."""
 
 import json
 import logging
+import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import requests
 from dateutil import parser as date_parser
 from django.conf import settings
 from django.utils import timezone
@@ -15,64 +15,82 @@ from .models import ServiceExecution, ServiceInfo
 logger = logging.getLogger(__name__)
 
 
-class ToreroAPIClient:
-    """client for interacting with torero api."""
+class ToreroCliClient:
+    """client for interacting with torero cli directly."""
     
     def __init__(self) -> None:
-        self.base_url = settings.TORERO_API_BASE_URL.rstrip('/')
-        self.timeout = settings.TORERO_API_TIMEOUT
-        self.session = requests.Session()
+        self.torero_command = "torero"
+        self.timeout = getattr(settings, 'TORERO_CLI_TIMEOUT', 30)
     
-    def _make_request(self, endpoint: str, method: str = "GET", **kwargs: Any) -> Optional[Dict[str, Any]]:
-        """make http request to torero api."""
-        url = f"{self.base_url}{endpoint}"
+    def _execute_command(self, args: List[str]) -> Optional[Dict[str, Any]]:
+        """execute torero cli command and return parsed json output."""
+        command = [self.torero_command] + args + ["--raw"]
         try:
-            response = self.session.request(
-                method=method,
-                url=url,
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
                 timeout=self.timeout,
-                **kwargs
+                check=False
             )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"torero api request failed: {url} - {e}")
+            
+            if result.returncode == 0 and result.stdout:
+                try:
+                    return json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    logger.warning(f"failed to parse json from torero output: {result.stdout[:200]}")
+                    return None
+            else:
+                logger.error(f"torero command failed: {' '.join(command)}\nError: {result.stderr}")
+                return None
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"torero command timed out: {' '.join(command)}")
+            return None
+        except Exception as e:
+            logger.error(f"failed to execute torero command: {e}")
             return None
     
     def get_services(self) -> List[Dict[str, Any]]:
-        """get list of all services."""
-        data = self._make_request("/v1/services/")
-        return data if isinstance(data, list) else []
+        """get list of all services from torero cli."""
+        data = self._execute_command(["get", "services"])
+        if data and isinstance(data, dict) and "services" in data:
+            return data["services"] if isinstance(data["services"], list) else []
+        return []
     
     def get_service_details(self, service_name: str) -> Optional[Dict[str, Any]]:
-        """get details for specific service."""
-        return self._make_request(f"/v1/services/{service_name}")
+        """get details for specific service from torero cli."""
+        return self._execute_command(["describe", "service", service_name])
     
     def execute_service(self, service_name: str, service_type: str, **params: Any) -> Optional[Dict[str, Any]]:
-        """execute a service and return execution data."""
-        endpoint_map = {
-            "ansible-playbook": f"/v1/execution/ansible-playbook/{service_name}",
-            "python-script": f"/v1/execution/python-script/{service_name}",
-            "opentofu-plan": f"/v1/execution/opentofu-plan/{service_name}/apply",
-        }
-        
-        endpoint = endpoint_map.get(service_type)
-        if not endpoint:
+        """execute a service via torero cli."""
+        # build command based on service type
+        if service_type == "ansible-playbook":
+            command = ["run", "service", "ansible-playbook", service_name]
+        elif service_type == "python-script":
+            command = ["run", "service", "python-script", service_name]
+        elif service_type == "opentofu-plan":
+            command = ["run", "service", "opentofu-plan", service_name]
+        else:
             logger.error(f"unsupported service type: {service_type}")
             return None
         
-        return self._make_request(endpoint, method="POST", json=params)
+        # add any additional parameters
+        for key, value in params.items():
+            command.extend([f"--{key}", str(value)])
+        
+        return self._execute_command(command)
 
 
 class DataCollectionService:
     """service for collecting and storing torero execution data."""
     
     def __init__(self) -> None:
-        self.api_client = ToreroAPIClient()
+        self.cli_client = ToreroCliClient()
     
     def sync_services(self) -> None:
-        """synchronize service information from torero api."""
-        services = self.api_client.get_services()
+        """synchronize service information from torero cli."""
+        services = self.cli_client.get_services()
         
         for service_data in services:
             service_name = service_data.get("name")
@@ -80,7 +98,7 @@ class DataCollectionService:
                 continue
             
             # get detailed service info
-            service_details = self.api_client.get_service_details(service_name)
+            service_details = self.cli_client.get_service_details(service_name)
             if not service_details:
                 continue
             

@@ -4,21 +4,24 @@ This guide provides step-by-step instructions for running tests across the torer
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [Running All Tests](#running-all-tests)
-- [Testing torero API](#testing-torero-api)
+- [Testing torero MCP](#testing-torero-mcp)
+- [Testing torero UI](#testing-torero-ui)
 - [Test Coverage](#test-coverage)
 - [Common Issues](#common-issues)
 
 ## Prerequisites
-Before running tests, ensure you have the following installed:
+Before running tests locally, ensure you have the following installed:
 - Python 3.10 or higher
-- `uv` package manager
+- `uv` package manager (for local development)
 - Git (for version control)
+
+**Note**: The examples below use `uv` for local development. When running tests inside the container, use the regular `pytest` commands as `uv` is not installed in the container.
 
 ## Running All Tests
 
 ### Quick Start
 
-The easiest way to run tests for torero API is using the provided script from the root directory:
+The easiest way to run tests is using the provided script from the root directory:
 
 ```bash
 # from the torero-container root directory
@@ -30,7 +33,7 @@ This script will:
 2. Install dependencies if needed
 3. Run all tests with coverage reporting
 
-## Testing torero API
+## Testing torero MCP
 
 ### Step-by-Step Setup
 
@@ -41,7 +44,7 @@ This script will:
 
 2. **Install development dependencies:**
    ```bash
-   cd opt/torero-api
+   cd opt/torero-mcp
    uv pip install -e ".[dev]"
    ```
 
@@ -49,13 +52,11 @@ This script will:
    - pytest (test framework)
    - pytest-asyncio (async test support)
    - pytest-cov (coverage reporting)
-   - httpx (HTTP client for testing)
    - Other development tools (black, flake8, isort)
 
-3. **Run tests from the root directory:**
+3. **Run tests:**
    ```bash
-   cd ../..  # back to project root
-   ./tools.sh --test
+   uv run pytest tests/ -v
    ```
 
 ### Alternative Methods
@@ -63,31 +64,75 @@ This script will:
 #### Method 1: Direct pytest execution
 ```bash
 # from torero-container root
-pytest tests/ -v
+uv run pytest opt/torero-mcp/tests/ -v
 ```
 
 #### Method 2: With specific options
 ```bash
 # run with coverage report
-pytest tests/ --cov=opt/torero-api/torero_api --cov-report=term-missing
+uv run pytest opt/torero-mcp/tests/ --cov=opt/torero-mcp/torero_mcp --cov-report=term-missing
 
 # stop on first failure
-pytest tests/ -x
+uv run pytest opt/torero-mcp/tests/ -x
 
 # run specific test file
-pytest tests/test_server.py
+uv run pytest opt/torero-mcp/tests/test_executor.py
 
 # run tests matching a pattern
-pytest tests/ -k "test_health"
+uv run pytest opt/torero-mcp/tests/ -k "test_health"
 
 # run with maximum verbosity
-pytest tests/ -vv
+uv run pytest opt/torero-mcp/tests/ -vv
 ```
 
-#### Method 3: From the torero-api directory
+## Testing in Container
+
+For testing with torero CLI available (recommended):
+
 ```bash
-cd opt/torero-api
-pytest ../../tests/ -v
+# Start the container
+docker compose -f docker-compose.dev.yml up -d
+
+# Run MCP tests
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/ -v
+
+# Run UI tests  
+docker compose -f docker-compose.dev.yml exec torero python opt/torero-ui/torero_ui/manage.py test
+
+# With coverage
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/ --cov=opt/torero-mcp/torero_mcp --cov-report=term-missing
+```
+
+## Testing torero UI
+
+### Step-by-Step Setup
+
+1. **Navigate to the UI directory:**
+   ```bash
+   cd opt/torero-ui
+   ```
+
+2. **Install development dependencies:**
+   ```bash
+   uv pip install -e ".[dev]"
+   ```
+
+3. **Run Django tests:**
+   ```bash
+   uv run python torero_ui/manage.py test
+   ```
+
+### Alternative Methods
+
+#### Method 1: Using pytest with Django
+```bash
+# from torero-ui directory
+uv run pytest --ds=torero_ui.settings
+```
+
+#### Method 2: Test specific apps
+```bash
+uv run python torero_ui/manage.py test dashboard
 ```
 
 ## Test Coverage
@@ -105,38 +150,32 @@ The test suite generates three types of coverage reports:
 
 ### Current Test Coverage
 
-As of the latest run:
-- **Total Coverage**: ~53%
-- **Test Count**: 77 tests
-- **Components Tested**:
-  - Core functionality (torero executor)
-  - Database operations (import/export)
-  - API endpoints (services, decorators, repositories, secrets)
-  - Server health checks
-  - Service descriptions
+Test coverage varies by component:
+- **torero-mcp**: Direct CLI executor and MCP tools
+- **torero-ui**: Django views, models, and service sync
 
 ### Coverage by Module
 
-| Module | Coverage | Key Areas |
-|--------|----------|-----------|
-| API Endpoints | 65-82% | Services, database, decorators |
-| Models | 89-100% | Data models and schemas |
-| Server | 82% | Application setup and routing |
-| Core Executor | 32% | Command execution logic |
+| Module | Component | Key Areas |
+|--------|-----------|-----------|
+| MCP Executor | torero-mcp | CLI command execution, parsing |
+| MCP Tools | torero-mcp | Service, database, health tools |
+| UI Models | torero-ui | ServiceInfo, ServiceExecution |
+| UI Services | torero-ui | ToreroCliClient, sync services |
+| UI Views | torero-ui | Dashboard, API endpoints |
 
 ## Common Issues
 
 ### Issue 1: pytest command not found
 
-**Solution**: Install development dependencies
+**Solution**: Install pytest using uv
 ```bash
-cd opt/torero-api
-uv pip install -e ".[dev]"
+uv pip install pytest pytest-asyncio pytest-cov
 ```
 
 ### Issue 2: Virtual environment not activated
 
-**Solution**: The `tools.sh` script handles this automatically. For manual testing:
+**Solution**: With uv, virtual environments are handled automatically. For manual activation:
 ```bash
 source .venv/bin/activate
 ```
@@ -157,13 +196,21 @@ cd /path/to/torero-container
 chmod +x tools.sh
 ```
 
+### Issue 5: torero CLI not found
+
+**Solution**: Tests that use ToreroExecutor or ToreroCliClient require torero to be installed
+```bash
+# Run tests in container (where torero is available)
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/
+```
+
 ## Advanced Testing
 
 ### Running with different Python versions
 
 ```bash
-# using uv to test with specific Python version
-uv run --python 3.11 pytest tests/
+# using specific Python version with uv
+uv run --python 3.11 pytest opt/torero-mcp/tests/
 ```
 
 ### Parallel test execution
@@ -173,17 +220,17 @@ uv run --python 3.11 pytest tests/
 uv pip install pytest-xdist
 
 # run tests in parallel
-pytest tests/ -n auto
+uv run pytest opt/torero-mcp/tests/ -n auto
 ```
 
 ### Debugging failed tests
 
 ```bash
 # drop into debugger on failures
-pytest tests/ --pdb
+uv run pytest opt/torero-mcp/tests/ --pdb
 
 # show local variables for failed tests
-pytest tests/ -l
+uv run pytest opt/torero-mcp/tests/ -l
 ```
 
 ## Continuous Integration
@@ -191,33 +238,51 @@ pytest tests/ -l
 For CI/CD pipelines, use the XML coverage report:
 
 ```bash
-pytest tests/ --cov=opt/torero-api/torero_api --cov-report=xml
+uv run pytest opt/torero-mcp/tests/ --cov=opt/torero-mcp/torero_mcp --cov-report=xml
 ```
 
 The `coverage.xml` file can be uploaded to services like Codecov or Coveralls.
 
 ## Writing New Tests
 
-Tests are located in the `tests/` directory at the root level. Follow these conventions:
+Tests are organized by component:
+- **MCP Tests**: `opt/torero-mcp/tests/`
+- **UI Tests**: `opt/torero-ui/tests/` or `opt/torero-ui/torero_ui/dashboard/tests.py`
+
+Follow these conventions:
 
 1. **File naming**: `test_<module_name>.py`
 2. **Test function naming**: `test_<functionality_description>`
 3. **Test classes**: `Test<ComponentName>`
-4. **Use fixtures**: Define reusable test fixtures in `tests/conftest.py`
+4. **Use fixtures**: Define reusable test fixtures in `conftest.py`
 
-Example test structure:
+Example test structure for MCP:
 ```python
 import pytest
-from fastapi.testclient import TestClient
+from torero_mcp.executor import ToreroExecutor
 
-def test_endpoint_success(client):
-    response = client.get("/api/v1/endpoint")
-    assert response.status_code == 200
-    assert response.json()["status"] == "success"
+@pytest.mark.asyncio
+async def test_executor_get_services():
+    executor = ToreroExecutor(timeout=30)
+    services = await executor.get_services()
+    assert isinstance(services, list)
 ```
 
-## Some `TODO` items
-- Review test failures and improve coverage
-- Add integration tests for complex workflows
+Example test structure for UI:
+```python
+from django.test import TestCase
+from torero_ui.dashboard.services import ToreroCliClient
+
+class TestCliClient(TestCase):
+    def test_get_services(self):
+        client = ToreroCliClient()
+        services = client.get_services()
+        self.assertIsInstance(services, list)
+```
+
+## TODO items
+- Add integration tests for MCP-CLI interaction
+- Add tests for UI sync service
+- Improve test coverage for subprocess handling
 - Set up continuous integration with GitHub Actions
 - Configure code quality tools (black, flake8, mypy)
