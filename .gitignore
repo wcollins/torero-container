@@ -1,6 +1,9 @@
 # data dir
 data/
 
+# local conf dir
+config/
+
 # build artifacts
 *.tar
 *.tar.gz

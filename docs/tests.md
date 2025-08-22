@@ -1,5 +1,4 @@
-# Testing Guide for torero Container
-
+# Guide for local testing
 This guide provides step-by-step instructions for running tests across the torero Container components.
 
 ## Table of Contents
@@ -10,7 +9,6 @@ This guide provides step-by-step instructions for running tests across the torer
 - [Common Issues](#common-issues)
 
 ## Prerequisites
-
 Before running tests, ensure you have the following installed:
 - Python 3.10 or higher
 - `uv` package manager
@@ -23,8 +21,8 @@ Before running tests, ensure you have the following installed:
 The easiest way to run tests for torero API is using the provided script from the root directory:
 
 ```bash
-# From the torero-container root directory
-./run_tests.sh
+# from the torero-container root directory
+./tools.sh --test
 ```
 
 This script will:
@@ -56,33 +54,33 @@ This script will:
 
 3. **Run tests from the root directory:**
    ```bash
-   cd ../..  # Back to torero-container root
-   ./run_tests.sh
+   cd ../..  # back to project root
+   ./tools.sh --test
    ```
 
 ### Alternative Methods
 
 #### Method 1: Direct pytest execution
 ```bash
-# From torero-container root
+# from torero-container root
 pytest tests/ -v
 ```
 
 #### Method 2: With specific options
 ```bash
-# Run with coverage report
+# run with coverage report
 pytest tests/ --cov=opt/torero-api/torero_api --cov-report=term-missing
 
-# Stop on first failure
+# stop on first failure
 pytest tests/ -x
 
-# Run specific test file
+# run specific test file
 pytest tests/test_server.py
 
-# Run tests matching a pattern
+# run tests matching a pattern
 pytest tests/ -k "test_health"
 
-# Run with maximum verbosity
+# run with maximum verbosity
 pytest tests/ -vv
 ```
 
@@ -138,25 +136,25 @@ uv pip install -e ".[dev]"
 
 ### Issue 2: Virtual environment not activated
 
-**Solution**: The `run_tests.sh` script handles this automatically. For manual testing:
+**Solution**: The `tools.sh` script handles this automatically. For manual testing:
 ```bash
-source opt/torero-api/.venv/bin/activate
+source .venv/bin/activate
 ```
 
 ### Issue 3: Import errors
 
 **Solution**: Ensure you're running tests from the correct directory
 ```bash
-# Always run from the torero-container root
+# always run from the torero-container root
 cd /path/to/torero-container
-./run_tests.sh
+./tools.sh --test
 ```
 
-### Issue 4: Permission denied on run_tests.sh
+### Issue 4: Permission denied on tools.sh
 
 **Solution**: Make the script executable
 ```bash
-chmod +x run_tests.sh
+chmod +x tools.sh
 ```
 
 ## Advanced Testing
@@ -164,27 +162,27 @@ chmod +x run_tests.sh
 ### Running with different Python versions
 
 ```bash
-# Using uv to test with specific Python version
+# using uv to test with specific Python version
 uv run --python 3.11 pytest tests/
 ```
 
 ### Parallel test execution
 
 ```bash
-# Install pytest-xdist
+# install pytest-xdist
 uv pip install pytest-xdist
 
-# Run tests in parallel
+# run tests in parallel
 pytest tests/ -n auto
 ```
 
 ### Debugging failed tests
 
 ```bash
-# Drop into debugger on failures
+# drop into debugger on failures
 pytest tests/ --pdb
 
-# Show local variables for failed tests
+# show local variables for failed tests
 pytest tests/ -l
 ```
 
@@ -218,8 +216,7 @@ def test_endpoint_success(client):
     assert response.json()["status"] == "success"
 ```
 
-## Next Steps
-
+## Some `TODO` items
 - Review test failures and improve coverage
 - Add integration tests for complex workflows
 - Set up continuous integration with GitHub Actions

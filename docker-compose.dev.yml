@@ -1,7 +1,8 @@
 ---
 services:
   torero:
-    image: ghcr.io/torerodev/torero-container:latest
+    build: .
+    image: torero-local
     container_name: torero
     ports:
       - "22:22"

@@ -1,10 +1,8 @@
-# torero Container Documentation
-
-This directory contains comprehensive documentation for the torero Container project, which includes the torero API, MCP Server, and UI components.
+# torero Container Docs
+This directory contains documentation for the torero Container project.
 
 ## Documentation Structure
-
-- **[tests.md](./tests.md)** - Step-by-step guide for running tests across all components
+- **[tests.md](./tests.md)** - Step-by-step guide for running local tests
 - **[openapi.json](./openapi.json)** - OpenAPI specification for the torero API (JSON format)
 - **[openapi.yaml](./openapi.yaml)** - OpenAPI specification for the torero API (YAML format)
 
@@ -20,14 +18,6 @@ Model Context Protocol server for integration with AI assistants. Located in `op
 Web-based user interface for managing torero operations. Located in `opt/torero-ui/`.
 
 ## Quick Links
-
 - [Running Tests](./tests.md)
 - [API Documentation](./openapi.yaml)
 - [Main README](../README.md)
-
-## Contributing
-
-For contribution guidelines and development setup, please refer to the individual component READMEs:
-- [torero API README](../opt/torero-api/README.md)
-- [torero MCP README](../opt/torero-mcp/README.md)
-- [torero UI README](../opt/torero-ui/README.md)
