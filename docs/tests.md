@@ -10,10 +10,12 @@ This guide provides step-by-step instructions for running tests across the torer
 - [Common Issues](#common-issues)
 
 ## Prerequisites
-Before running tests, ensure you have the following installed:
+Before running tests locally, ensure you have the following installed:
 - Python 3.10 or higher
-- `uv` package manager
+- `uv` package manager (for local development)
 - Git (for version control)
+
+**Note**: The examples below use `uv` for local development. When running tests inside the container, use the regular `pytest` commands as `uv` is not installed in the container.
 
 ## Running All Tests
 
@@ -81,6 +83,24 @@ uv run pytest opt/torero-mcp/tests/ -k "test_health"
 
 # run with maximum verbosity
 uv run pytest opt/torero-mcp/tests/ -vv
+```
+
+## Testing in Container
+
+For testing with torero CLI available (recommended):
+
+```bash
+# Start the container
+docker compose -f docker-compose.dev.yml up -d
+
+# Run MCP tests
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/ -v
+
+# Run UI tests  
+docker compose -f docker-compose.dev.yml exec torero python opt/torero-ui/torero_ui/manage.py test
+
+# With coverage
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/ --cov=opt/torero-mcp/torero_mcp --cov-report=term-missing
 ```
 
 ## Testing torero UI
@@ -180,8 +200,8 @@ chmod +x tools.sh
 
 **Solution**: Tests that use ToreroExecutor or ToreroCliClient require torero to be installed
 ```bash
-# Install torero or run tests in container
-docker compose -f docker-compose.dev.yml exec torero uv run pytest
+# Run tests in container (where torero is available)
+docker compose -f docker-compose.dev.yml exec torero pytest opt/torero-mcp/tests/
 ```
 
 ## Advanced Testing
