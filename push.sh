@@ -25,8 +25,8 @@ fi
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -v, --version VERSION              Container version (default: ${VERSION:-1.4.0})"
-    echo "  -t, --torero-version VERSION       Torero version (default: ${TORERO_VERSION:-1.4.0})"
+    echo "  -v, --version VERSION              Container version (default: ${VERSION:-1.5.0})"
+    echo "  -t, --torero-version VERSION       Torero version (default: ${TORERO_VERSION:-1.5.0})"
     echo "  -p, --python-version VERSION       Python version (default: ${PYTHON_VERSION:-3.13.0})"
     echo "  -o, --opentofu-version VERSION     OpenTofu version (default: ${OPENTOFU_VERSION:-1.10.5})"
     echo "  -u, --username USERNAME            GitHub username"
@@ -96,8 +96,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # prompt for missing values
-prompt_for_value "VERSION" "Enter container version" "${VERSION:-1.4.0}"
-prompt_for_value "TORERO_VERSION" "Enter Torero version" "${TORERO_VERSION:-1.4.0}"
+prompt_for_value "VERSION" "Enter container version" "${VERSION:-1.5.0}"
+prompt_for_value "TORERO_VERSION" "Enter Torero version" "${TORERO_VERSION:-1.5.0}"
 prompt_for_value "PYTHON_VERSION" "Enter Python version" "${PYTHON_VERSION:-3.13.0}"
 prompt_for_value "OPENTOFU_VERSION" "Enter OpenTofu version" "${OPENTOFU_VERSION:-1.10.5}"
 prompt_for_value "GITHUB_USERNAME" "Enter GitHub username"

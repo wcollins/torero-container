@@ -25,7 +25,7 @@ GHCR_REGISTRY ?= ghcr.io/torerodev
 
 # default versions if not specified (fallback if .env is missing)
 # override with 'make build TORERO_VERSION=x.x.x'
-TORERO_VERSION ?= 1.4.0
+TORERO_VERSION ?= 1.5.0
 
 # default python version
 PYTHON_VERSION ?= 3.13.0
@@ -46,7 +46,7 @@ PLATFORMS ?= linux/amd64,linux/arm64
 LOCAL_PLATFORM ?= linux/$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 
 # all available torero versions for build-all
-TORERO_VERSIONS ?= 1.4.0
+TORERO_VERSIONS ?= 1.5.0
 
 help:
 	@echo "available targets:"
@@ -60,7 +60,7 @@ help:
 	@echo ""
 	@echo "variables:"
 	@echo "  GHCR_REGISTRY     - github container registry path (default: ghcr.io/torerodev)"
-	@echo "  TORERO_VERSION    - torero version to build (default: 1.4.0)"
+	@echo "  TORERO_VERSION    - torero version to build (default: 1.5.0)"
 	@echo "  PYTHON_VERSION    - python version to install (default: 3.13.0)"
 	@echo "  TORERO_VERSIONS   - space-separated list of torero versions for build-all (default: 1.3.1)"
 	@echo "  FORCE_REBUILD     - set to 'true' to force rebuild (default: false)"
@@ -70,9 +70,9 @@ help:
 	@echo ""
 	@echo "examples:"
 	@echo "  make build"
-	@echo "  make build TORERO_VERSION=1.4.0 PYTHON_VERSION=3.13.0"
+	@echo "  make build TORERO_VERSION=1.5.0 PYTHON_VERSION=3.13.0"
 	@echo "  make build-multi PLATFORMS=linux/amd64,linux/arm64"
-	@echo "  make build-all TORERO_VERSIONS=\"1.3.1 1.4.0\""
+	@echo "  make build-all TORERO_VERSIONS=\"1.4.0 1.5.0\""
 	@echo "  make push"
 	@echo "  make push-all"
 
