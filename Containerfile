@@ -35,15 +35,9 @@ ENV TORERO_MCP_TRANSPORT_TYPE=sse
 ENV TORERO_MCP_TRANSPORT_HOST=0.0.0.0
 ENV TORERO_MCP_TRANSPORT_PORT=8080
 ENV TORERO_MCP_TRANSPORT_PATH=/sse
-ENV TORERO_API_BASE_URL=http://localhost:8000
-ENV TORERO_API_TIMEOUT=30
+ENV TORERO_CLI_TIMEOUT=30
 ENV TORERO_LOG_LEVEL=INFO
-ENV TORERO_MCP_PID_FILE=/tmp/torero-mcp.pid
 ENV TORERO_MCP_LOG_FILE=/home/admin/.torero-mcp.log
-
-# api server is disabled by default
-ENV ENABLE_API=false
-ENV API_PORT=8000
 
 # ui server is disabled by default
 ENV ENABLE_UI=false
@@ -60,12 +54,11 @@ COPY configure.sh /configure.sh
 COPY entrypoint.sh /entrypoint.sh
 
 # copy torero projects to image
-COPY opt/torero-api /opt/torero-api
 COPY opt/torero-ui /opt/torero-ui
 COPY opt/torero-mcp /opt/torero-mcp
 
 # install Python dependencies at build time
-RUN pip install --no-cache-dir -e /opt/torero-api /opt/torero-ui /opt/torero-mcp
+RUN pip install --no-cache-dir -e /opt/torero-ui /opt/torero-mcp
 
 # set up Django static files at build time
 ENV DJANGO_SETTINGS_MODULE=torero_ui.settings
@@ -84,9 +77,6 @@ RUN chmod +x /configure.sh && /configure.sh && \
 
 # expose ssh port (only used if SSH is enabled)
 EXPOSE 22
-
-# expose API port (only used if API is enabled)
-EXPOSE 8000
 
 # expose UI port (only used if UI is enabled)
 EXPOSE 8001
