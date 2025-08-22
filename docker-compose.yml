@@ -5,14 +5,11 @@ services:
     container_name: torero
     ports:
       - "22:22"
-      - "8000:8000"
       - "8001:8001"
       - "8080:8080"
     volumes:
       - ./data:/home/admin/data
     environment:
-      - ENABLE_API=true
-      - API_PORT=8000
       - ENABLE_UI=true
       - UI_PORT=8001
       - UI_REFRESH_INTERVAL=15
