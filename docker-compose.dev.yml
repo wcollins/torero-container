@@ -1,7 +1,9 @@
 ---
 services:
   torero:
-    build: .
+    build:
+      context: .
+      dockerfile: Containerfile
     image: torero-local
     container_name: torero
     ports:

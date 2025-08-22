@@ -12,7 +12,7 @@ on:
       torero_version:
         description: 'torero version to build'
         required: true
-        default: '1.4.0'
+        default: '1.5.0'
       python_version:
         description: 'Python version to install'
         required: true
@@ -29,7 +29,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: torerodev/torero-container
-  DEFAULT_TORERO_VERSION: '1.4.0'  # Update this when new torero versions are released
+  DEFAULT_TORERO_VERSION: '1.5.0'  # Update this when new torero versions are released
 
 jobs:
 
