@@ -244,46 +244,181 @@ class ToreroExecutor:
             raise ToreroExecutorError(f"unexpected json structure: {type(raw_output)}")
     
     # service execution operations
-    async def run_ansible_playbook_service(self, name: str, **kwargs) -> Dict[str, Any]:
-        """execute ansible playbook service."""
-        command = ["run", "service", "ansible-playbook", name, "--raw"]
+    async def run_ansible_playbook_service(
+        self, 
+        name: str, 
+        set_vars: Optional[Dict[str, str]] = None,
+        set_secrets: Optional[List[str]] = None,
+        use_decorator: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """execute ansible playbook service with full parameter support.
         
-        # add additional parameters
-        for key, value in kwargs.items():
-            if value is not None:
-                command.append(f"--{key}={value}")
+        args:
+            name: service name
+            set_vars: dict of key=value pairs for --set parameters
+            set_secrets: list of secret names for --set-secret parameters
+            use_decorator: whether to display possible inputs via decorator (--use flag)
+            **kwargs: additional parameters for backward compatibility
+        """
+        command = ["run", "service", "ansible-playbook", name]
+        
+        # add --set parameters
+        if set_vars:
+            for key, value in set_vars.items():
+                command.extend(["--set", f"{key}={value}"])
+        
+        # add --set-secret parameters
+        if set_secrets:
+            for secret in set_secrets:
+                command.extend(["--set-secret", secret])
+        
+        # add --use flag
+        if use_decorator:
+            command.append("--use")
+        
+        # add --raw for consistent output format
+        command.append("--raw")
         
         return await self.execute_command(command, timeout=300)  # 5 min timeout
     
-    async def run_python_script_service(self, name: str, **kwargs) -> Dict[str, Any]:
-        """execute python script service."""
-        command = ["run", "service", "python-script", name, "--raw"]
+    async def run_python_script_service(
+        self,
+        name: str,
+        set_vars: Optional[Dict[str, str]] = None,
+        set_secrets: Optional[List[str]] = None,
+        use_decorator: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """execute python script service with full parameter support.
         
-        for key, value in kwargs.items():
-            if value is not None:
-                command.append(f"--{key}={value}")
+        args:
+            name: service name
+            set_vars: dict of key=value pairs for --set parameters
+            set_secrets: list of secret names for --set-secret parameters
+            use_decorator: whether to display possible inputs via decorator (--use flag)
+            **kwargs: additional parameters for backward compatibility
+        """
+        command = ["run", "service", "python-script", name]
+        
+        # add --set parameters
+        if set_vars:
+            for key, value in set_vars.items():
+                command.extend(["--set", f"{key}={value}"])
+        
+        # add --set-secret parameters
+        if set_secrets:
+            for secret in set_secrets:
+                command.extend(["--set-secret", secret])
+        
+        # add --use flag
+        if use_decorator:
+            command.append("--use")
+        
+        # add --raw for consistent output format
+        command.append("--raw")
         
         return await self.execute_command(command, timeout=300)
     
-    async def run_opentofu_plan_apply_service(self, name: str, **kwargs) -> Dict[str, Any]:
-        """execute opentofu plan apply service."""
-        command = ["run", "service", "opentofu-plan", "apply", name, "--raw"]
+    async def run_opentofu_plan_apply_service(
+        self,
+        name: str,
+        set_vars: Optional[Dict[str, str]] = None,
+        set_secrets: Optional[List[str]] = None,
+        state: Optional[str] = None,
+        state_out: Optional[str] = None,
+        use_decorator: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """execute opentofu plan apply service with full parameter support.
         
-        for key, value in kwargs.items():
-            if value is not None:
-                command.append(f"--{key}={value}")
+        args:
+            name: service name
+            set_vars: dict of key=value pairs for --set parameters
+            set_secrets: list of secret names for --set-secret parameters
+            state: state file to utilize (JSON or @file path)
+            state_out: path to write resulting state file
+            use_decorator: whether to display possible inputs via decorator (--use flag)
+            **kwargs: additional parameters for backward compatibility
+        """
+        command = ["run", "service", "opentofu-plan", "apply", name]
+        
+        # add --set parameters
+        if set_vars:
+            for key, value in set_vars.items():
+                command.extend(["--set", f"{key}={value}"])
+        
+        # add --set-secret parameters
+        if set_secrets:
+            for secret in set_secrets:
+                command.extend(["--set-secret", secret])
+        
+        # add --state parameter
+        if state:
+            command.extend(["--state", state])
+        
+        # add --state-out parameter
+        if state_out:
+            command.extend(["--state-out", state_out])
+        
+        # add --use flag
+        if use_decorator:
+            command.append("--use")
+        
+        # add --raw for consistent output format
+        command.append("--raw")
         
         return await self.execute_command(command, timeout=600)  # 10 min timeout
     
-    async def run_opentofu_plan_destroy_service(self, name: str, **kwargs) -> Dict[str, Any]:
-        """execute opentofu plan destroy service."""
-        command = ["run", "service", "opentofu-plan", "destroy", name, "--raw"]
+    async def run_opentofu_plan_destroy_service(
+        self,
+        name: str,
+        set_vars: Optional[Dict[str, str]] = None,
+        set_secrets: Optional[List[str]] = None,
+        state: Optional[str] = None,
+        state_out: Optional[str] = None,
+        use_decorator: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """execute opentofu plan destroy service with full parameter support.
         
-        for key, value in kwargs.items():
-            if value is not None:
-                command.append(f"--{key}={value}")
+        args:
+            name: service name
+            set_vars: dict of key=value pairs for --set parameters
+            set_secrets: list of secret names for --set-secret parameters
+            state: state file to utilize (JSON or @file path)
+            state_out: path to write resulting state file
+            use_decorator: whether to display possible inputs via decorator (--use flag)
+            **kwargs: additional parameters for backward compatibility
+        """
+        command = ["run", "service", "opentofu-plan", "destroy", name]
         
-        return await self.execute_command(command, timeout=600)
+        # add --set parameters
+        if set_vars:
+            for key, value in set_vars.items():
+                command.extend(["--set", f"{key}={value}"])
+        
+        # add --set-secret parameters
+        if set_secrets:
+            for secret in set_secrets:
+                command.extend(["--set-secret", secret])
+        
+        # add --state parameter
+        if state:
+            command.extend(["--state", state])
+        
+        # add --state-out parameter
+        if state_out:
+            command.extend(["--state-out", state_out])
+        
+        # add --use flag
+        if use_decorator:
+            command.append("--use")
+        
+        # add --raw for consistent output format
+        command.append("--raw")
+        
+        return await self.execute_command(command, timeout=600)  # 10 min timeout
     
     # database operations
     async def export_database(self, format: str = "yaml") -> Dict[str, Any]:
