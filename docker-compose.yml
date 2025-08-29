@@ -4,7 +4,7 @@ services:
     image: ghcr.io/torerodev/torero-container:latest
     container_name: torero
     ports:
-      - "22:22"
+      - "2222:22"
       - "8001:8001"
       - "8080:8080"
     volumes:
