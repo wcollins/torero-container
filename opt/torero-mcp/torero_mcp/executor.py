@@ -155,8 +155,15 @@ class ToreroExecutor:
         raw_output = await self.execute_command(["get", "services", "--raw"])
         
         # handle different response formats
-        if isinstance(raw_output, dict) and "items" in raw_output:
-            return raw_output["items"]
+        if isinstance(raw_output, dict):
+            if "items" in raw_output:
+                return raw_output["items"]
+            elif "services" in raw_output:
+                return raw_output["services"]
+            else:
+
+                # if dict has no known key, raise error
+                raise ToreroExecutorError(f"unexpected json structure: dict with keys {list(raw_output.keys())}")
         elif isinstance(raw_output, list):
             return raw_output
         else:
@@ -186,10 +193,15 @@ class ToreroExecutor:
         """get all decorators."""
         raw_output = await self.execute_command(["get", "decorators", "--raw"])
         
-        if isinstance(raw_output, dict) and "decorators" in raw_output:
-            return raw_output["decorators"]
-        elif isinstance(raw_output, dict) and "items" in raw_output:
-            return raw_output["items"]
+        if isinstance(raw_output, dict):
+            if "decorators" in raw_output:
+                return raw_output["decorators"]
+            elif "items" in raw_output:
+                return raw_output["items"]
+            else:
+
+                # if dict has no known key, raise error
+                raise ToreroExecutorError(f"unexpected json structure: dict with keys {list(raw_output.keys())}")
         elif isinstance(raw_output, list):
             return raw_output
         else:
@@ -220,8 +232,18 @@ class ToreroExecutor:
         """get all secrets."""
         raw_output = await self.execute_command(["get", "secrets", "--raw"])
         
-        if isinstance(raw_output, dict) and "items" in raw_output:
-            return raw_output["items"]
+        if isinstance(raw_output, dict):
+            if "items" in raw_output:
+                return raw_output["items"]
+            elif "secrets" in raw_output:
+                return raw_output["secrets"]
+            elif "names" in raw_output:
+                # Handle case where only names are returned
+                return raw_output["names"]
+            else:
+
+                # if dict has no known key, raise error
+                raise ToreroExecutorError(f"unexpected json structure: dict with keys {list(raw_output.keys())}")
         elif isinstance(raw_output, list):
             return raw_output
         else:
@@ -236,8 +258,15 @@ class ToreroExecutor:
         """get all registries."""
         raw_output = await self.execute_command(["get", "registries", "--raw"])
         
-        if isinstance(raw_output, dict) and "items" in raw_output:
-            return raw_output["items"]
+        if isinstance(raw_output, dict):
+            if "items" in raw_output:
+                return raw_output["items"]
+            elif "registries" in raw_output:
+                return raw_output["registries"]
+            else:
+
+                # if dict has no known key, raise error
+                raise ToreroExecutorError(f"unexpected json structure: dict with keys {list(raw_output.keys())}")
         elif isinstance(raw_output, list):
             return raw_output
         else:
