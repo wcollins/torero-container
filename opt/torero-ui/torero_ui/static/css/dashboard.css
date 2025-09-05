@@ -421,6 +421,1216 @@ body {
     }
 }
 
+/* opentofu output styling with brand theme */
+.opentofu-tabs {
+    margin-top: 20px;
+    background-color: #000000;
+    border: 1px solid #5cfcfe;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.opentofu-tabs .tab-buttons {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #5cfcfe;
+    padding-bottom: 10px;
+}
+
+.opentofu-tabs .tab-button {
+    background: #111111;
+    border: 1px solid #333333;
+    color: #ffffff;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0.5px;
+    border-radius: 4px 4px 0 0;
+}
+
+.opentofu-tabs .tab-button:hover {
+    background: #222222;
+    color: #5cfcfe;
+    border-color: #5cfcfe;
+}
+
+.opentofu-tabs .tab-button.active {
+    background: #222222;
+    color: #ccff00;
+    border-color: #ccff00;
+    border-bottom: 2px solid #222222;
+    margin-bottom: -2px;
+}
+
+.opentofu-tab-content {
+    display: none;
+    padding: 20px;
+    background: #0a0a0a;
+    border-radius: 0 0 4px 4px;
+}
+
+.opentofu-tab-content.active {
+    display: block;
+}
+
+/* console output styling */
+.console-section {
+    margin-bottom: 20px;
+}
+
+.console-header {
+    color: #5cfcfe;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: #111111;
+    border-left: 3px solid #5cfcfe;
+}
+
+.console-header-error {
+    color: #ccff00;
+    border-left-color: #ccff00;
+}
+
+.tofu-console-output {
+    background: #1d2021;
+    color: #ebdbb2;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre;
+    border: 1px solid #3c3836;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.tofu-console-error {
+    border-left: 3px solid #fb4934;
+}
+
+/* state file display */
+.state-container {
+    padding: 10px;
+}
+
+.state-summary {
+    background: #111111;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.state-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333333;
+}
+
+.state-metadata {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.metadata-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    background: #000000;
+    border-radius: 3px;
+    border: 1px solid #333333;
+}
+
+.metadata-label {
+    color: #888888;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.metadata-value {
+    color: #ccff00;
+    font-weight: bold;
+}
+
+/* resources grid */
+.resources-section {
+    margin-top: 20px;
+}
+
+.resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.resource-card {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.resource-card:hover {
+    border-color: #5cfcfe;
+    background: #222222;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(92, 252, 254, 0.1);
+}
+
+.resource-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333333;
+}
+
+.resource-type {
+    color: #ccff00;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.resource-mode {
+    color: #888888;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.resource-name {
+    color: #5cfcfe;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.resource-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+}
+
+.resource-provider {
+    color: #5cfcfe;
+}
+
+.resource-instances {
+    color: #ccff00;
+}
+
+/* outputs display */
+.outputs-container {
+    padding: 10px;
+}
+
+.outputs-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333333;
+}
+
+.outputs-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.output-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.output-key {
+    color: #5cfcfe;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.output-value-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.output-value {
+    color: #ccff00;
+    word-break: break-word;
+    font-family: 'Consolas', monospace;
+    flex: 1;
+}
+
+.output-type {
+    color: #888888;
+    font-size: 11px;
+    margin-left: 10px;
+    white-space: nowrap;
+}
+
+/* timing information */
+.timing-container {
+    padding: 10px;
+}
+
+.timing-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333333;
+}
+
+.timing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.timing-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.timing-label {
+    color: #888888;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.timing-value {
+    color: #5cfcfe;
+    font-weight: bold;
+}
+
+.timing-success {
+    color: #ccff00 !important;
+}
+
+.timing-error {
+    color: #ff4444 !important;
+}
+
+/* no output message */
+.no-output {
+    text-align: center;
+    padding: 40px;
+    color: #888888;
+    font-style: italic;
+    background: #111111;
+    border: 1px dashed #333333;
+    border-radius: 4px;
+}
+
+/* scrollbar styling for brand theme */
+.tofu-console-output::-webkit-scrollbar,
+.opentofu-tab-content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.tofu-console-output::-webkit-scrollbar-track,
+.opentofu-tab-content::-webkit-scrollbar-track {
+    background: #504945;
+    border-radius: 5px;
+}
+
+.tofu-console-output::-webkit-scrollbar-thumb,
+.opentofu-tab-content::-webkit-scrollbar-thumb {
+    background: #665c54;
+    border-radius: 5px;
+}
+
+.tofu-console-output::-webkit-scrollbar-thumb:hover,
+.opentofu-tab-content::-webkit-scrollbar-thumb:hover {
+    background: #7c6f64;
+}
+
+/* python script output styling with brand theme */
+.python-tabs {
+    margin-top: 20px;
+    background-color: #000000;
+    border: 1px solid #5cfcfe;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.python-tabs .tab-buttons {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #5cfcfe;
+    padding-bottom: 10px;
+}
+
+.python-tabs .tab-button {
+    background: #111111;
+    border: 1px solid #333333;
+    color: #ffffff;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0.5px;
+    border-radius: 4px 4px 0 0;
+}
+
+.python-tabs .tab-button:hover {
+    background: #222222;
+    color: #5cfcfe;
+    border-color: #5cfcfe;
+}
+
+.python-tabs .tab-button.active {
+    background: #222222;
+    color: #ccff00;
+    border-color: #ccff00;
+    border-bottom: 2px solid #222222;
+    margin-bottom: -2px;
+}
+
+.python-tab-content {
+    display: none;
+    padding: 20px;
+    background: #0a0a0a;
+    border-radius: 0 0 4px 4px;
+}
+
+.python-tab-content.active {
+    display: block;
+}
+
+/* python console output styling with gruvbox */
+.python-console-output {
+    background: #1d2021;
+    color: #ebdbb2;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre;
+    border: 1px solid #3c3836;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.python-console-error {
+    border-left: 3px solid #fb4934;
+}
+
+/* python log level colors using gruvbox */
+.python-critical { color: #cc241d; font-weight: bold; }
+.python-error { color: #fb4934; }
+.python-warning { color: #d79921; }
+.python-info { color: #458588; }
+.python-debug { color: #928374; }
+.python-success { color: #98971a; }
+.python-json { color: #83a598; }
+.python-file { color: #83a598; text-decoration: underline; }
+.python-line { color: #fabd2f; font-weight: bold; }
+.python-timing { color: #8ec07c; font-weight: bold; }
+
+/* python stack trace styling */
+.stacktrace-container {
+    padding: 10px;
+}
+
+.stacktrace-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.stacktrace-item {
+    background: #111111;
+    border: 1px solid #333333;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.stacktrace-title {
+    background: #5cfcfe;
+    color: #000000;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.stacktrace-content {
+    padding: 15px;
+    background: #1d2021;
+    color: #ebdbb2;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-x: auto;
+}
+
+.stacktrace-file { color: #83a598; }
+.stacktrace-line { color: #fabd2f; font-weight: bold; }
+.stacktrace-function { color: #b16286; }
+.stacktrace-exception { color: #fb4934; font-weight: bold; }
+.stacktrace-header-text { color: #fb4934; font-weight: bold; }
+
+/* python performance styling */
+.performance-container {
+    padding: 10px;
+}
+
+.performance-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.performance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.performance-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.performance-label {
+    color: #888888;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.performance-value {
+    color: #5cfcfe;
+    font-weight: bold;
+}
+
+.performance-success {
+    color: #ccff00 !important;
+}
+
+.performance-error {
+    color: #ff4444 !important;
+}
+
+.performance-subheader {
+    color: #5cfcfe;
+    font-size: 13px;
+    font-weight: bold;
+    margin: 15px 0 10px 0;
+}
+
+.timing-context {
+    background: #111111;
+    border: 1px solid #333333;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+/* python environment styling */
+.environment-container {
+    padding: 10px;
+}
+
+.environment-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.env-section {
+    margin-bottom: 20px;
+}
+
+.env-subheader {
+    color: #ccff00;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.env-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.env-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 8px;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.env-label {
+    color: #888888;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.env-value {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.import-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.import-item {
+    background: #111111;
+    border: 1px solid #5cfcfe;
+    color: #ccff00;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'Consolas', monospace;
+}
+
+.module-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.module-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 8px;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.module-name {
+    color: #5cfcfe;
+    font-weight: bold;
+}
+
+.module-version {
+    color: #ccff00;
+    font-size: 11px;
+    font-family: 'Consolas', monospace;
+}
+
+/* ansible playbook output styling with brand theme */
+.ansible-tabs {
+    margin-top: 20px;
+    background-color: #000000;
+    border: 1px solid #5cfcfe;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.ansible-tabs .tab-buttons {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #5cfcfe;
+    padding-bottom: 10px;
+}
+
+.ansible-tabs .tab-button {
+    background: #111111;
+    border: 1px solid #333333;
+    color: #ffffff;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0.5px;
+    border-radius: 4px 4px 0 0;
+}
+
+.ansible-tabs .tab-button:hover {
+    background: #222222;
+    color: #5cfcfe;
+    border-color: #5cfcfe;
+}
+
+.ansible-tabs .tab-button.active {
+    background: #222222;
+    color: #ccff00;
+    border-color: #ccff00;
+    border-bottom: 2px solid #222222;
+    margin-bottom: -2px;
+}
+
+.ansible-tab-content {
+    display: none;
+    padding: 20px;
+    background: #0a0a0a;
+    border-radius: 0 0 4px 4px;
+}
+
+.ansible-tab-content.active {
+    display: block;
+}
+
+/* ansible console output styling with gruvbox */
+.ansible-console-output {
+    background: #1d2021;
+    color: #ebdbb2;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre;
+    border: 1px solid #3c3836;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.ansible-console-error {
+    border-left: 3px solid #fb4934;
+}
+
+/* ansible status colors using gruvbox */
+.ansible-ok { color: #98971a; }
+.ansible-changed { color: #d79921; }
+.ansible-failed { color: #fb4934; }
+.ansible-skipped { color: #458588; }
+.ansible-unreachable { color: #928374; }
+.ansible-success { color: #98971a; }
+.ansible-recap { color: #ebdbb2; font-weight: bold; }
+.ansible-task { color: #458588; font-weight: bold; }
+.ansible-task-name { color: #ebdbb2; }
+.ansible-host { color: #d79921; font-weight: bold; }
+.ansible-timing { color: #8ec07c; font-weight: bold; }
+.ansible-json { color: #83a598; }
+.ansible-yaml { color: #b16286; }
+
+/* ansible summary styling */
+.ansible-summary-container {
+    padding: 10px;
+}
+
+.ansible-summary-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.ansible-overview {
+    margin-bottom: 20px;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.summary-item {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.summary-label {
+    color: #888888;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.summary-value {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.ansible-section-header {
+    color: #ccff00;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #333333;
+}
+
+.host-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+.host-summary-card {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.host-name {
+    color: #5cfcfe;
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.host-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.stat-item {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.plays-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.play-item {
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.play-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.play-name {
+    color: #ccff00;
+    font-weight: bold;
+}
+
+.play-status {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 2px;
+}
+
+.play-status.ok {
+    background: #ccff00;
+    color: #000;
+}
+
+.play-status.failed {
+    background: #ff4444;
+    color: #fff;
+}
+
+.play-details {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: #c9c9c9;
+}
+
+/* ansible tasks styling */
+.ansible-tasks-container {
+    padding: 10px;
+}
+
+.ansible-tasks-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.tasks-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.task-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.task-indicator.ok { background: #00d924; }
+.task-indicator.changed { background: #ff8c00; }
+.task-indicator.failed { background: #ff073a; }
+.task-indicator.skipped { background: #0088cc; }
+
+.task-content {
+    flex: 1;
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.task-name {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.task-status {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 2px;
+}
+
+.task-details {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.task-module {
+    color: #5cfcfe;
+    font-family: 'Consolas', monospace;
+}
+
+.task-duration {
+    color: #ccff00;
+}
+
+.task-hosts {
+    margin-bottom: 8px;
+}
+
+.hosts-label {
+    color: #c9c9c9;
+    font-size: 11px;
+    margin-right: 8px;
+}
+
+.host-tag {
+    background: #5cfcfe;
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    margin-right: 4px;
+}
+
+.task-changes {
+    margin-top: 10px;
+}
+
+.changes-header {
+    color: #ccff00;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.changes-content {
+    background: #000000;
+    border: 1px solid #333333;
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* ansible hosts styling */
+.ansible-hosts-container {
+    padding: 10px;
+}
+
+.ansible-hosts-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.hosts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 15px;
+}
+
+.host-result-card {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.host-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333333;
+}
+
+.host-result-name {
+    color: #5cfcfe;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.host-result-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.host-result-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.result-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px;
+    background: #000000;
+    border-radius: 3px;
+}
+
+.result-stat .stat-label {
+    color: #888888;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.result-stat .stat-value {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.host-tasks {
+    border-top: 1px solid #333333;
+    padding-top: 10px;
+}
+
+.host-tasks-header {
+    color: #ccff00;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.host-tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.host-task-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px;
+    font-size: 11px;
+}
+
+.host-task-item .task-indicator {
+    width: 6px;
+    height: 6px;
+    margin-top: 0;
+}
+
+.task-text {
+    color: #d4d4d4;
+}
+
+.more-tasks {
+    color: #c9c9c9;
+    font-size: 10px;
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* ansible variables styling */
+.ansible-variables-container {
+    padding: 10px;
+}
+
+.ansible-variables-header {
+    color: #5cfcfe;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #5cfcfe;
+}
+
+.variables-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.variable-section {
+    background: #111111;
+    border: 1px solid #333333;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.variable-category {
+    color: #ccff00;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #333333;
+}
+
+.variables-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.variable-item {
+    background: #000000;
+    border: 1px solid #333333;
+    padding: 10px;
+    border-radius: 3px;
+}
+
+.variable-key {
+    color: #5cfcfe;
+    font-weight: bold;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.variable-value {
+    color: #ffffff;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    word-break: break-word;
+}
+
+.more-vars {
+    color: #888888;
+    font-size: 11px;
+    font-style: italic;
+    text-align: center;
+    padding: 8px;
+}
+
+/* scrollbar styling for code output */
+.python-console-output::-webkit-scrollbar,
+.python-tab-content::-webkit-scrollbar,
+.ansible-console-output::-webkit-scrollbar,
+.ansible-tab-content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.python-console-output::-webkit-scrollbar-track,
+.python-tab-content::-webkit-scrollbar-track,
+.ansible-console-output::-webkit-scrollbar-track,
+.ansible-tab-content::-webkit-scrollbar-track {
+    background: #504945;
+    border-radius: 5px;
+}
+
+.python-console-output::-webkit-scrollbar-thumb,
+.python-tab-content::-webkit-scrollbar-thumb,
+.ansible-console-output::-webkit-scrollbar-thumb,
+.ansible-tab-content::-webkit-scrollbar-thumb {
+    background: #665c54;
+    border-radius: 5px;
+}
+
+.python-console-output::-webkit-scrollbar-thumb:hover,
+.python-tab-content::-webkit-scrollbar-thumb:hover,
+.ansible-console-output::-webkit-scrollbar-thumb:hover,
+.ansible-tab-content::-webkit-scrollbar-thumb:hover {
+    background: #7c6f64;
+}
+
 /* utility classes */
 .text-center { text-align: center; }
 .text-success { color: #ccff00; }
