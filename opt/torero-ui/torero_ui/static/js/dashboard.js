@@ -144,12 +144,25 @@ function updateServiceStatus(services) {
         const statusClass = service.latest_status ? `status-${service.latest_status}` : 'status-value';
         const statusText = service.latest_status ? service.latest_status.toUpperCase() : 'NEVER RUN';
         
+        // Determine logo based on service type
+        let logoHtml = '';
+        if (service.service_type === 'ansible-playbook') {
+            logoHtml = '<img src="/static/img/ansible.svg" alt="Ansible" class="service-logo">';
+        } else if (service.service_type === 'opentofu-plan') {
+            logoHtml = '<img src="/static/img/opentofu.svg" alt="OpenTofu" class="service-logo">';
+        } else if (service.service_type === 'python-script') {
+            logoHtml = '<img src="/static/img/python.svg" alt="Python" class="service-logo">';
+        }
+        
         const card = document.createElement('div');
         card.className = 'status-card';
         card.dataset.service = service.name;
         
         card.innerHTML = `
-            <div class="service-name">${service.name}</div>
+            <div class="service-header">
+                ${logoHtml}
+                <div class="service-name">${service.name}</div>
+            </div>
             <div class="status-info">
                 <span class="status-label">Type:</span>
                 <span class="status-value">${service.service_type}</span>
@@ -210,9 +223,22 @@ function updateExecutionList(listId, executions) {
             minute: '2-digit' 
         });
         
+        // Determine logo based on service type
+        let logoHtml = '';
+        if (execution.service_type === 'ansible-playbook') {
+            logoHtml = '<img src="/static/img/ansible.svg" alt="Ansible" class="execution-logo">';
+        } else if (execution.service_type === 'opentofu-plan') {
+            logoHtml = '<img src="/static/img/opentofu.svg" alt="OpenTofu" class="execution-logo">';
+        } else if (execution.service_type === 'python-script') {
+            logoHtml = '<img src="/static/img/python.svg" alt="Python" class="execution-logo">';
+        }
+        
         item.innerHTML = `
             <div class="execution-header">
-                <span class="execution-service">${execution.service_name}</span>
+                <div class="execution-service-with-logo">
+                    ${logoHtml}
+                    <span class="execution-service">${execution.service_name}</span>
+                </div>
                 <span class="execution-status ${execution.status}">${execution.status.toUpperCase()}</span>
             </div>
             <div class="execution-details">

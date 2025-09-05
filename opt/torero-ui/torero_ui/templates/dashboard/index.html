@@ -1,4 +1,5 @@
 {% extends "dashboard/base.html" %}
+{% load static %}
 
 {% block content %}
 <!-- summary statistics -->
@@ -36,7 +37,16 @@
     <div class="status-grid" id="service-status">
         {% for service in services %}
         <div class="status-card" data-service="{{ service.name }}">
-            <div class="service-name">{{ service.name }}</div>
+            <div class="service-header">
+                {% if service.service_type == "ansible-playbook" %}
+                <img src="{% static 'img/ansible.svg' %}" alt="Ansible" class="service-logo">
+                {% elif service.service_type == "opentofu-plan" %}
+                <img src="{% static 'img/opentofu.svg' %}" alt="OpenTofu" class="service-logo">
+                {% elif service.service_type == "python-script" %}
+                <img src="{% static 'img/python.svg' %}" alt="Python" class="service-logo">
+                {% endif %}
+                <div class="service-name">{{ service.name }}</div>
+            </div>
             <div class="status-info">
                 <span class="status-label">Type:</span>
                 <span class="status-value">{{ service.service_type }}</span>
@@ -76,7 +86,16 @@
                 {% for execution in recent_executions %}
                 <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
                     <div class="execution-header">
-                        <span class="execution-service">{{ execution.service_name }}</span>
+                        <div class="execution-service-with-logo">
+                            {% if execution.service_type == "ansible-playbook" %}
+                            <img src="{% static 'img/ansible.svg' %}" alt="Ansible" class="execution-logo">
+                            {% elif execution.service_type == "opentofu-plan" %}
+                            <img src="{% static 'img/opentofu.svg' %}" alt="OpenTofu" class="execution-logo">
+                            {% elif execution.service_type == "python-script" %}
+                            <img src="{% static 'img/python.svg' %}" alt="Python" class="execution-logo">
+                            {% endif %}
+                            <span class="execution-service">{{ execution.service_name }}</span>
+                        </div>
                         <span class="execution-status {{ execution.status }}">{{ execution.status|upper }}</span>
                     </div>
                     <div class="execution-details">
@@ -101,7 +120,16 @@
                     {% if execution.status == 'success' %}
                     <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
                         <div class="execution-header">
-                            <span class="execution-service">{{ execution.service_name }}</span>
+                            <div class="execution-service-with-logo">
+                                {% if execution.service_type == "ansible-playbook" %}
+                                <img src="{% static 'img/ansible.svg' %}" alt="Ansible" class="execution-logo">
+                                {% elif execution.service_type == "opentofu-plan" %}
+                                <img src="{% static 'img/opentofu.svg' %}" alt="OpenTofu" class="execution-logo">
+                                {% elif execution.service_type == "python-script" %}
+                                <img src="{% static 'img/python.svg' %}" alt="Python" class="execution-logo">
+                                {% endif %}
+                                <span class="execution-service">{{ execution.service_name }}</span>
+                            </div>
                             <span class="execution-status success">SUCCESS</span>
                         </div>
                         <div class="execution-details">
@@ -127,7 +155,16 @@
                     {% if execution.status == 'failed' %}
                     <li class="execution-item" onclick="showExecutionDetails({{ execution.id }})">
                         <div class="execution-header">
-                            <span class="execution-service">{{ execution.service_name }}</span>
+                            <div class="execution-service-with-logo">
+                                {% if execution.service_type == "ansible-playbook" %}
+                                <img src="{% static 'img/ansible.svg' %}" alt="Ansible" class="execution-logo">
+                                {% elif execution.service_type == "opentofu-plan" %}
+                                <img src="{% static 'img/opentofu.svg' %}" alt="OpenTofu" class="execution-logo">
+                                {% elif execution.service_type == "python-script" %}
+                                <img src="{% static 'img/python.svg' %}" alt="Python" class="execution-logo">
+                                {% endif %}
+                                <span class="execution-service">{{ execution.service_name }}</span>
+                            </div>
                             <span class="execution-status failed">FAILED</span>
                         </div>
                         <div class="execution-details">
