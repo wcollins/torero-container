@@ -369,28 +369,45 @@ function generateExecutionDetailHTML(execution) {
     
     html += '</div>';
     
-    // add stdout if available
-    if (execution.stdout) {
-        html += `
-            <h3 class="text-info mt-20 mb-10">Standard Output</h3>
-            <div class="execution-output">${escapeHtml(execution.stdout)}</div>
-        `;
-    }
-    
-    // add stderr if available
-    if (execution.stderr) {
-        html += `
-            <h3 class="text-error mt-20 mb-10">Standard Error</h3>
-            <div class="execution-output">${escapeHtml(execution.stderr)}</div>
-        `;
-    }
-    
-    // add execution data if available
-    if (execution.execution_data && Object.keys(execution.execution_data).length > 0) {
-        html += `
-            <h3 class="text-info mt-20 mb-10">Execution Data</h3>
-            <div class="execution-output">${escapeHtml(JSON.stringify(execution.execution_data, null, 2))}</div>
-        `;
+    // check service type and use appropriate formatter
+    if (execution.service_type === 'opentofu-plan' && execution.execution_data && 
+        typeof execution.execution_data === 'object' && 
+        (execution.execution_data.stdout || execution.execution_data.state_file)) {
+        // use specialized opentofu formatter
+        html += formatOpenTofuOutput(execution.execution_data);
+    } else if (execution.service_type === 'python-script' && execution.execution_data && 
+               typeof execution.execution_data === 'object') {
+        // use specialized python formatter
+        html += formatPythonOutput(execution.execution_data);
+    } else if (execution.service_type === 'ansible-playbook' && execution.execution_data && 
+               typeof execution.execution_data === 'object') {
+        // use specialized ansible formatter
+        html += formatAnsibleOutput(execution.execution_data);
+    } else {
+        // use standard output display for other service types
+        // add stdout if available
+        if (execution.stdout) {
+            html += `
+                <h3 class="text-info mt-20 mb-10">Standard Output</h3>
+                <div class="execution-output">${escapeHtml(execution.stdout)}</div>
+            `;
+        }
+        
+        // add stderr if available
+        if (execution.stderr) {
+            html += `
+                <h3 class="text-error mt-20 mb-10">Standard Error</h3>
+                <div class="execution-output">${escapeHtml(execution.stderr)}</div>
+            `;
+        }
+        
+        // add execution data if available
+        if (execution.execution_data && Object.keys(execution.execution_data).length > 0) {
+            html += `
+                <h3 class="text-info mt-20 mb-10">Execution Data</h3>
+                <div class="execution-output">${escapeHtml(JSON.stringify(execution.execution_data, null, 2))}</div>
+            `;
+        }
     }
     
     return html;
@@ -448,6 +465,1188 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// opentofu output formatting functions
+function formatOpenTofuOutput(executionData) {
+    // parse the data if it's a string
+    const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
+    
+    // generate unique ids for tabs within this execution
+    const tabPrefix = 'tofu-' + Date.now();
+    
+    return `
+        <div class="opentofu-tabs mt-20">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchOpenTofuTab('${tabPrefix}-output', this)">Console Output</button>
+                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-state', this)">State</button>
+                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-outputs', this)">Outputs</button>
+                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-timing', this)">Timing</button>
+                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-raw', this)">Raw Data</button>
+            </div>
+            
+            <div id="${tabPrefix}-output" class="opentofu-tab-content active">
+                ${formatConsoleOutput(data)}
+            </div>
+            
+            <div id="${tabPrefix}-state" class="opentofu-tab-content">
+                ${formatStateFile(data.state_file)}
+            </div>
+            
+            <div id="${tabPrefix}-outputs" class="opentofu-tab-content">
+                ${formatTofuOutputs(data.state_file?.outputs)}
+            </div>
+            
+            <div id="${tabPrefix}-timing" class="opentofu-tab-content">
+                ${formatTimingInfo(data)}
+            </div>
+            
+            <div id="${tabPrefix}-raw" class="opentofu-tab-content">
+                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+            </div>
+        </div>
+    `;
+}
+
+// format console output with ansi to html conversion using dracula theme
+function formatConsoleOutput(data) {
+    if (!data.stdout && !data.stderr) {
+        return '<div class="no-output">No console output available</div>';
+    }
+    
+    let html = '';
+    
+    if (data.stdout) {
+        const formattedStdout = convertAnsiToHtml(data.stdout);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header">Standard Output</h4>
+                <pre class="tofu-console-output">${formattedStdout}</pre>
+            </div>
+        `;
+    }
+    
+    if (data.stderr) {
+        const formattedStderr = convertAnsiToHtml(data.stderr);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header console-header-error">Standard Error</h4>
+                <pre class="tofu-console-output tofu-console-error">${formattedStderr}</pre>
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// convert ansi escape codes to html with gruvbox theme colors
+function convertAnsiToHtml(text) {
+    if (!text) return '';
+    
+    // gruvbox dark theme colors
+    const gruvbox = {
+        black: '#282828',
+        red: '#cc241d',
+        green: '#98971a',
+        yellow: '#d79921',
+        blue: '#458588',
+        magenta: '#b16286',
+        cyan: '#689d6a',
+        white: '#a89984',
+        brightBlack: '#928374',
+        brightRed: '#fb4934',
+        brightGreen: '#b8bb26',
+        brightYellow: '#fabd2f',
+        brightBlue: '#83a598',
+        brightMagenta: '#d3869b',
+        brightCyan: '#8ec07c',
+        brightWhite: '#ebdbb2'
+    };
+    
+    // first escape html to prevent xss
+    let result = escapeHtml(text);
+    
+    // replace ansi color codes with html spans
+    // handle 8-color and 16-color ansi codes
+    result = result
+        // reset
+        .replace(/\x1b\[0m/g, '</span>')
+        .replace(/\x1b\[m/g, '</span>')
+        
+        // bold/bright
+        .replace(/\x1b\[1m/g, '<span style="font-weight: bold;">')
+        .replace(/\x1b\[22m/g, '</span>')
+        
+        // dim
+        .replace(/\x1b\[2m/g, '<span style="opacity: 0.7;">')
+        
+        // italic
+        .replace(/\x1b\[3m/g, '<span style="font-style: italic;">')
+        .replace(/\x1b\[23m/g, '</span>')
+        
+        // underline
+        .replace(/\x1b\[4m/g, '<span style="text-decoration: underline;">')
+        .replace(/\x1b\[24m/g, '</span>')
+        
+        // foreground colors (30-37, 90-97)
+        .replace(/\x1b\[30m/g, `<span style="color: ${gruvbox.black};">`)
+        .replace(/\x1b\[31m/g, `<span style="color: ${gruvbox.red};">`)
+        .replace(/\x1b\[32m/g, `<span style="color: ${gruvbox.green};">`)
+        .replace(/\x1b\[33m/g, `<span style="color: ${gruvbox.yellow};">`)
+        .replace(/\x1b\[34m/g, `<span style="color: ${gruvbox.blue};">`)
+        .replace(/\x1b\[35m/g, `<span style="color: ${gruvbox.magenta};">`)
+        .replace(/\x1b\[36m/g, `<span style="color: ${gruvbox.cyan};">`)
+        .replace(/\x1b\[37m/g, `<span style="color: ${gruvbox.white};">`)
+        
+        // bright foreground colors
+        .replace(/\x1b\[90m/g, `<span style="color: ${gruvbox.brightBlack};">`)
+        .replace(/\x1b\[91m/g, `<span style="color: ${gruvbox.brightRed};">`)
+        .replace(/\x1b\[92m/g, `<span style="color: ${gruvbox.brightGreen};">`)
+        .replace(/\x1b\[93m/g, `<span style="color: ${gruvbox.brightYellow};">`)
+        .replace(/\x1b\[94m/g, `<span style="color: ${gruvbox.brightBlue};">`)
+        .replace(/\x1b\[95m/g, `<span style="color: ${gruvbox.brightMagenta};">`)
+        .replace(/\x1b\[96m/g, `<span style="color: ${gruvbox.brightCyan};">`)
+        .replace(/\x1b\[97m/g, `<span style="color: ${gruvbox.brightWhite};">`)
+        
+        // background colors (40-47, 100-107)
+        .replace(/\x1b\[40m/g, `<span style="background-color: ${gruvbox.black};">`)
+        .replace(/\x1b\[41m/g, `<span style="background-color: ${gruvbox.red};">`)
+        .replace(/\x1b\[42m/g, `<span style="background-color: ${gruvbox.green};">`)
+        .replace(/\x1b\[43m/g, `<span style="background-color: ${gruvbox.yellow};">`)
+        .replace(/\x1b\[44m/g, `<span style="background-color: ${gruvbox.blue};">`)
+        .replace(/\x1b\[45m/g, `<span style="background-color: ${gruvbox.magenta};">`)
+        .replace(/\x1b\[46m/g, `<span style="background-color: ${gruvbox.cyan};">`)
+        .replace(/\x1b\[47m/g, `<span style="background-color: ${gruvbox.white};">`)
+        
+        // handle combined codes like \x1b[1;32m (bold green)
+        .replace(/\x1b\[1;30m/g, `<span style="font-weight: bold; color: ${gruvbox.black};">`)
+        .replace(/\x1b\[1;31m/g, `<span style="font-weight: bold; color: ${gruvbox.red};">`)
+        .replace(/\x1b\[1;32m/g, `<span style="font-weight: bold; color: ${gruvbox.green};">`)
+        .replace(/\x1b\[1;33m/g, `<span style="font-weight: bold; color: ${gruvbox.yellow};">`)
+        .replace(/\x1b\[1;34m/g, `<span style="font-weight: bold; color: ${gruvbox.blue};">`)
+        .replace(/\x1b\[1;35m/g, `<span style="font-weight: bold; color: ${gruvbox.magenta};">`)
+        .replace(/\x1b\[1;36m/g, `<span style="font-weight: bold; color: ${gruvbox.cyan};">`)
+        .replace(/\x1b\[1;37m/g, `<span style="font-weight: bold; color: ${gruvbox.white};">`)
+        
+        // handle any remaining escape sequences
+        .replace(/\x1b\[[0-9;]*m/g, '');
+    
+    // clean up any unclosed spans at the end
+    const openSpans = (result.match(/<span[^>]*>/g) || []).length;
+    const closeSpans = (result.match(/<\/span>/g) || []).length;
+    if (openSpans > closeSpans) {
+        result += '</span>'.repeat(openSpans - closeSpans);
+    }
+    
+    return result;
+}
+
+// format state file information
+function formatStateFile(stateFile) {
+    if (!stateFile) {
+        return '<div class="no-output">No state information available</div>';
+    }
+    
+    const resources = stateFile.resources || [];
+    const outputs = stateFile.outputs || {};
+    
+    return `
+        <div class="state-container">
+            <div class="state-summary">
+                <h4 class="state-header">State Summary</h4>
+                <div class="state-metadata">
+                    <div class="metadata-item">
+                        <span class="metadata-label">Resources:</span>
+                        <span class="metadata-value">${resources.length}</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Outputs:</span>
+                        <span class="metadata-value">${Object.keys(outputs).length}</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Terraform Version:</span>
+                        <span class="metadata-value">${stateFile.terraform_version || 'N/A'}</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Serial:</span>
+                        <span class="metadata-value">${stateFile.serial || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            ${resources.length > 0 ? formatResources(resources) : ''}
+        </div>
+    `;
+}
+
+// format resource list from state file
+function formatResources(resources) {
+    if (!resources || resources.length === 0) {
+        return '';
+    }
+    
+    return `
+        <div class="resources-section">
+            <h4 class="state-header">Resources (${resources.length})</h4>
+            <div class="resource-grid">
+                ${resources.map(resource => `
+                    <div class="resource-card">
+                        <div class="resource-header">
+                            <span class="resource-type">${resource.type || 'unknown'}</span>
+                            <span class="resource-mode">${resource.mode || ''}</span>
+                        </div>
+                        <div class="resource-name">${resource.name || 'unnamed'}</div>
+                        <div class="resource-details">
+                            <span class="resource-provider">${extractProviderName(resource.provider)}</span>
+                            <span class="resource-instances">Instances: ${resource.instances ? resource.instances.length : 0}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// extract provider name from full provider string
+function extractProviderName(provider) {
+    if (!provider) return 'unknown';
+    // extract from format like: provider["registry.opentofu.org/hashicorp/null"]
+    const match = provider.match(/provider\["[^/]*\/([^/]*)\/([^"]*)/);
+    if (match) {
+        return `${match[1]}/${match[2]}`;
+    }
+    return provider;
+}
+
+// format tofu outputs
+function formatTofuOutputs(outputs) {
+    if (!outputs || Object.keys(outputs).length === 0) {
+        return '<div class="no-output">No outputs defined</div>';
+    }
+    
+    return `
+        <div class="outputs-container">
+            <h4 class="outputs-header">Terraform Outputs</h4>
+            <div class="outputs-grid">
+                ${Object.entries(outputs).map(([key, value]) => `
+                    <div class="output-item">
+                        <div class="output-key">${key}</div>
+                        <div class="output-value-container">
+                            <span class="output-value">${formatOutputValue(value.value)}</span>
+                            <span class="output-type">${value.type || 'unknown'}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// format output value based on type
+function formatOutputValue(value) {
+    if (value === null || value === undefined) {
+        return 'null';
+    }
+    if (typeof value === 'object') {
+        return JSON.stringify(value, null, 2);
+    }
+    return String(value);
+}
+
+// format timing information
+function formatTimingInfo(data) {
+    if (!data.start_time && !data.end_time && !data.elapsed_time) {
+        return '<div class="no-output">No timing information available</div>';
+    }
+    
+    const startTime = data.start_time ? new Date(data.start_time) : null;
+    const endTime = data.end_time ? new Date(data.end_time) : null;
+    
+    return `
+        <div class="timing-container">
+            <h4 class="timing-header">Execution Timing</h4>
+            <div class="timing-grid">
+                ${startTime ? `
+                    <div class="timing-item">
+                        <span class="timing-label">Started:</span>
+                        <span class="timing-value">${startTime.toLocaleString()}</span>
+                    </div>
+                ` : ''}
+                ${endTime ? `
+                    <div class="timing-item">
+                        <span class="timing-label">Completed:</span>
+                        <span class="timing-value">${endTime.toLocaleString()}</span>
+                    </div>
+                ` : ''}
+                ${data.elapsed_time ? `
+                    <div class="timing-item">
+                        <span class="timing-label">Duration:</span>
+                        <span class="timing-value">${data.elapsed_time.toFixed(3)} seconds</span>
+                    </div>
+                ` : ''}
+                ${data.return_code !== undefined ? `
+                    <div class="timing-item">
+                        <span class="timing-label">Return Code:</span>
+                        <span class="timing-value ${data.return_code === 0 ? 'timing-success' : 'timing-error'}">${data.return_code}</span>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// switch between opentofu output tabs
+function switchOpenTofuTab(tabId, button) {
+    // find the parent container
+    const container = button.closest('.opentofu-tabs');
+    
+    // hide all tab contents in this container
+    const contents = container.querySelectorAll('.opentofu-tab-content');
+    contents.forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // remove active class from all buttons in this container
+    const buttons = container.querySelectorAll('.tab-button');
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // show selected tab
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    // mark button as active
+    button.classList.add('active');
+}
+
+// python script output formatting functions
+function formatPythonOutput(executionData) {
+    const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
+    const tabPrefix = 'python-' + Date.now();
+    
+    return `
+        <div class="python-tabs mt-20">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchPythonTab('${tabPrefix}-output', this)">Console Output</button>
+                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-stacktrace', this)">Stack Trace</button>
+                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-performance', this)">Performance</button>
+                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-environment', this)">Environment</button>
+                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-raw', this)">Raw Data</button>
+            </div>
+            
+            <div id="${tabPrefix}-output" class="python-tab-content active">
+                ${formatPythonConsoleOutput(data)}
+            </div>
+            
+            <div id="${tabPrefix}-stacktrace" class="python-tab-content">
+                ${formatPythonStackTrace(data)}
+            </div>
+            
+            <div id="${tabPrefix}-performance" class="python-tab-content">
+                ${formatPythonPerformance(data)}
+            </div>
+            
+            <div id="${tabPrefix}-environment" class="python-tab-content">
+                ${formatPythonEnvironment(data)}
+            </div>
+            
+            <div id="${tabPrefix}-raw" class="python-tab-content">
+                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+            </div>
+        </div>
+    `;
+}
+
+// format python console output with log level detection
+function formatPythonConsoleOutput(data) {
+    if (!data.stdout && !data.stderr) {
+        return '<div class="no-output">No console output available</div>';
+    }
+    
+    let html = '';
+    
+    if (data.stdout) {
+        const formattedStdout = formatPythonLogOutput(data.stdout);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header">Standard Output</h4>
+                <pre class="python-console-output">${formattedStdout}</pre>
+            </div>
+        `;
+    }
+    
+    if (data.stderr) {
+        const formattedStderr = formatPythonLogOutput(data.stderr);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header console-header-error">Standard Error</h4>
+                <pre class="python-console-output python-console-error">${formattedStderr}</pre>
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// format python output with log level detection and syntax highlighting
+function formatPythonLogOutput(text) {
+    if (!text) return '';
+    
+    let result = escapeHtml(text);
+    
+    // python log level patterns with colors
+    result = result
+        .replace(/\b(CRITICAL|FATAL)(\s*[:\-]|\b)/gi, '<span class="python-critical">$1$2</span>')
+        .replace(/\b(ERROR)(\s*[:\-]|\b)/gi, '<span class="python-error">$1$2</span>')
+        .replace(/\b(WARNING|WARN)(\s*[:\-]|\b)/gi, '<span class="python-warning">$1$2</span>')
+        .replace(/\b(INFO)(\s*[:\-]|\b)/gi, '<span class="python-info">$1$2</span>')
+        .replace(/\b(DEBUG)(\s*[:\-]|\b)/gi, '<span class="python-debug">$1$2</span>')
+        
+        // highlight json objects
+        .replace(/(\{[^{}]*\})/g, '<span class="python-json">$1</span>')
+        
+        // highlight file paths and line numbers
+        .replace(/(\w+\.py):(\d+)/g, '<span class="python-file">$1</span>:<span class="python-line">$2</span>')
+        
+        // highlight execution times
+        .replace(/(\d+\.?\d*)\s*(s|ms|seconds?|milliseconds?)\b/gi, '<span class="python-timing">$1$2</span>')
+        
+        // highlight success indicators
+        .replace(/\b(SUCCESS|PASSED|OK|COMPLETE)\b/gi, '<span class="python-success">$1</span>')
+        
+        // highlight failure indicators
+        .replace(/\b(FAILED?|FAILURE|ERROR|EXCEPTION|TRACEBACK)\b/gi, '<span class="python-error">$1</span>');
+    
+    return result;
+}
+
+// format python stack trace with file links
+function formatPythonStackTrace(data) {
+    const text = data.stderr || data.stdout || '';
+    
+    if (!text.includes('Traceback') && !text.includes('Exception')) {
+        return '<div class="no-output">No stack trace information available</div>';
+    }
+    
+    // extract traceback sections
+    const tracebackPattern = /Traceback \(most recent call last\):[\s\S]*?(?=\n\n|\n[A-Z]|\n$|$)/g;
+    const tracebacks = text.match(tracebackPattern) || [];
+    
+    if (tracebacks.length === 0) {
+        return '<div class="no-output">No stack trace information available</div>';
+    }
+    
+    return `
+        <div class="stacktrace-container">
+            <h4 class="stacktrace-header">Stack Traces (${tracebacks.length})</h4>
+            ${tracebacks.map((trace, index) => `
+                <div class="stacktrace-item">
+                    <div class="stacktrace-title">Traceback ${index + 1}</div>
+                    <pre class="stacktrace-content">${formatStackTraceText(trace)}</pre>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// format individual stack trace with enhanced readability
+function formatStackTraceText(text) {
+    let result = escapeHtml(text);
+    
+    result = result
+        // highlight file paths and line numbers
+        .replace(/(File\s+)"([^"]+)",\s+line\s+(\d+)/g, 
+                 '$1"<span class="stacktrace-file">$2</span>", line <span class="stacktrace-line">$3</span>')
+        
+        // highlight function names
+        .replace(/in\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, 'in <span class="stacktrace-function">$1</span>')
+        
+        // highlight exception types
+        .replace(/^([A-Z][a-zA-Z]*Error|[A-Z][a-zA-Z]*Exception):/gm, 
+                 '<span class="stacktrace-exception">$1</span>:')
+        
+        // highlight traceback header
+        .replace(/(Traceback \(most recent call last\):)/, '<span class="stacktrace-header-text">$1</span>');
+    
+    return result;
+}
+
+// format python performance metrics
+function formatPythonPerformance(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    
+    // extract timing information
+    const timingPatterns = [
+        /executed in (\d+\.?\d*)\s*(s|ms|seconds?|milliseconds?)/gi,
+        /took (\d+\.?\d*)\s*(s|ms|seconds?|milliseconds?)/gi,
+        /duration[:\s]+(\d+\.?\d*)\s*(s|ms|seconds?|milliseconds?)/gi,
+        /time[:\s]+(\d+\.?\d*)\s*(s|ms|seconds?|milliseconds?)/gi
+    ];
+    
+    let timings = [];
+    timingPatterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            timings.push({
+                value: parseFloat(match[1]),
+                unit: match[2],
+                context: text.substring(Math.max(0, match.index - 50), match.index + 100)
+            });
+        }
+    });
+    
+    if (timings.length === 0 && !data.elapsed_time) {
+        return '<div class="no-output">No performance information available</div>';
+    }
+    
+    return `
+        <div class="performance-container">
+            <h4 class="performance-header">Performance Metrics</h4>
+            <div class="performance-grid">
+                ${data.elapsed_time ? `
+                    <div class="performance-item">
+                        <span class="performance-label">Total Execution Time:</span>
+                        <span class="performance-value">${data.elapsed_time.toFixed(3)}s</span>
+                    </div>
+                ` : ''}
+                ${data.return_code !== undefined ? `
+                    <div class="performance-item">
+                        <span class="performance-label">Exit Code:</span>
+                        <span class="performance-value ${data.return_code === 0 ? 'performance-success' : 'performance-error'}">${data.return_code}</span>
+                    </div>
+                ` : ''}
+                ${timings.map((timing, index) => `
+                    <div class="performance-item">
+                        <span class="performance-label">Timing ${index + 1}:</span>
+                        <span class="performance-value">${timing.value}${timing.unit}</span>
+                    </div>
+                `).join('')}
+            </div>
+            ${timings.length > 0 ? `
+                <div class="performance-details">
+                    <h5 class="performance-subheader">Timing Context</h5>
+                    ${timings.map((timing, index) => `
+                        <div class="timing-context">
+                            <strong>Timing ${index + 1}:</strong>
+                            <pre>${escapeHtml(timing.context)}</pre>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// format python environment information
+function formatPythonEnvironment(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    
+    // extract import statements and module information
+    const imports = extractPythonImports(text);
+    const modules = extractPythonModules(text);
+    
+    return `
+        <div class="environment-container">
+            <h4 class="environment-header">Environment Information</h4>
+            
+            ${data.start_time ? `
+                <div class="env-section">
+                    <h5 class="env-subheader">Execution Context</h5>
+                    <div class="env-grid">
+                        <div class="env-item">
+                            <span class="env-label">Started:</span>
+                            <span class="env-value">${new Date(data.start_time).toLocaleString()}</span>
+                        </div>
+                        ${data.end_time ? `
+                            <div class="env-item">
+                                <span class="env-label">Completed:</span>
+                                <span class="env-value">${new Date(data.end_time).toLocaleString()}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${imports.length > 0 ? `
+                <div class="env-section">
+                    <h5 class="env-subheader">Detected Imports (${imports.length})</h5>
+                    <div class="import-grid">
+                        ${imports.map(imp => `
+                            <span class="import-item">${imp}</span>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${modules.length > 0 ? `
+                <div class="env-section">
+                    <h5 class="env-subheader">Module Information</h5>
+                    <div class="module-list">
+                        ${modules.map(module => `
+                            <div class="module-item">
+                                <span class="module-name">${module.name}</span>
+                                ${module.version ? `<span class="module-version">${module.version}</span>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// extract python imports from output
+function extractPythonImports(text) {
+    const importPatterns = [
+        /^import\s+([a-zA-Z_][a-zA-Z0-9_.]*)/gm,
+        /^from\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+import/gm
+    ];
+    
+    let imports = new Set();
+    
+    importPatterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            imports.add(match[1]);
+        }
+    });
+    
+    return Array.from(imports).slice(0, 20); // limit to 20 imports
+}
+
+// extract python module versions from output
+function extractPythonModules(text) {
+    const modulePattern = /([a-zA-Z_][a-zA-Z0-9_-]+)[:\s]+(\d+\.\d+(?:\.\d+)?)/g;
+    let modules = [];
+    let match;
+    
+    while ((match = modulePattern.exec(text)) !== null) {
+        modules.push({
+            name: match[1],
+            version: match[2]
+        });
+    }
+    
+    return modules.slice(0, 10); // limit to 10 modules
+}
+
+// switch between python output tabs
+function switchPythonTab(tabId, button) {
+    const container = button.closest('.python-tabs');
+    
+    const contents = container.querySelectorAll('.python-tab-content');
+    contents.forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    const buttons = container.querySelectorAll('.tab-button');
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    button.classList.add('active');
+}
+
+// ansible playbook output formatting functions
+function formatAnsibleOutput(executionData) {
+    const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
+    const tabPrefix = 'ansible-' + Date.now();
+    
+    return `
+        <div class="ansible-tabs mt-20">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchAnsibleTab('${tabPrefix}-summary', this)">Play Summary</button>
+                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-tasks', this)">Task Details</button>
+                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-hosts', this)">Host Results</button>
+                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-variables', this)">Variables</button>
+                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-console', this)">Console Log</button>
+                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-raw', this)">Raw Data</button>
+            </div>
+            
+            <div id="${tabPrefix}-summary" class="ansible-tab-content active">
+                ${formatAnsibleSummary(data)}
+            </div>
+            
+            <div id="${tabPrefix}-tasks" class="ansible-tab-content">
+                ${formatAnsibleTasks(data)}
+            </div>
+            
+            <div id="${tabPrefix}-hosts" class="ansible-tab-content">
+                ${formatAnsibleHosts(data)}
+            </div>
+            
+            <div id="${tabPrefix}-variables" class="ansible-tab-content">
+                ${formatAnsibleVariables(data)}
+            </div>
+            
+            <div id="${tabPrefix}-console" class="ansible-tab-content">
+                ${formatAnsibleConsole(data)}
+            </div>
+            
+            <div id="${tabPrefix}-raw" class="ansible-tab-content">
+                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+            </div>
+        </div>
+    `;
+}
+
+// format ansible play summary
+function formatAnsibleSummary(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    
+    // extract play and task summary information
+    const playResults = extractAnsiblePlayResults(text);
+    const hostSummary = extractAnsibleHostSummary(text);
+    
+    return `
+        <div class="ansible-summary-container">
+            <h4 class="ansible-summary-header">Playbook Summary</h4>
+            
+            <div class="ansible-overview">
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="summary-label">Total Plays:</span>
+                        <span class="summary-value">${playResults.length}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Hosts:</span>
+                        <span class="summary-value">${Object.keys(hostSummary).length}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Duration:</span>
+                        <span class="summary-value">${data.elapsed_time ? data.elapsed_time.toFixed(2) + 's' : 'N/A'}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Result:</span>
+                        <span class="summary-value ${data.return_code === 0 ? 'ansible-success' : 'ansible-failed'}">${data.return_code === 0 ? 'SUCCESS' : 'FAILED'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            ${Object.keys(hostSummary).length > 0 ? `
+                <div class="host-summary-section">
+                    <h5 class="ansible-section-header">Host Summary</h5>
+                    <div class="host-summary-grid">
+                        ${Object.entries(hostSummary).map(([host, stats]) => `
+                            <div class="host-summary-card">
+                                <div class="host-name">${host}</div>
+                                <div class="host-stats">
+                                    <span class="stat-item ansible-ok">${stats.ok || 0} ok</span>
+                                    <span class="stat-item ansible-changed">${stats.changed || 0} changed</span>
+                                    <span class="stat-item ansible-failed">${stats.failed || 0} failed</span>
+                                    <span class="stat-item ansible-skipped">${stats.skipped || 0} skipped</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${playResults.length > 0 ? `
+                <div class="plays-section">
+                    <h5 class="ansible-section-header">Play Results</h5>
+                    <div class="plays-list">
+                        ${playResults.map((play, index) => `
+                            <div class="play-item">
+                                <div class="play-header">
+                                    <span class="play-name">${play.name || `Play ${index + 1}`}</span>
+                                    <span class="play-status ${play.status}">${play.status.toUpperCase()}</span>
+                                </div>
+                                <div class="play-details">
+                                    <span>Tasks: ${play.tasks || 0}</span>
+                                    <span>Hosts: ${play.hosts || 0}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// format ansible task details
+function formatAnsibleTasks(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    const tasks = extractAnsibleTasks(text);
+    
+    if (tasks.length === 0) {
+        return '<div class="no-output">No task information available</div>';
+    }
+    
+    return `
+        <div class="ansible-tasks-container">
+            <h4 class="ansible-tasks-header">Task Details (${tasks.length})</h4>
+            
+            <div class="tasks-timeline">
+                ${tasks.map((task, index) => `
+                    <div class="task-item">
+                        <div class="task-indicator ${task.status}"></div>
+                        <div class="task-content">
+                            <div class="task-header">
+                                <span class="task-name">${task.name || `Task ${index + 1}`}</span>
+                                <span class="task-status ${task.status}">${task.status.toUpperCase()}</span>
+                            </div>
+                            <div class="task-details">
+                                <div class="task-module">${task.module || 'unknown'}</div>
+                                ${task.duration ? `<div class="task-duration">${task.duration}</div>` : ''}
+                            </div>
+                            ${task.hosts && task.hosts.length > 0 ? `
+                                <div class="task-hosts">
+                                    <span class="hosts-label">Affected hosts:</span>
+                                    ${task.hosts.map(host => `<span class="host-tag">${host}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                            ${task.changes && task.changes.length > 0 ? `
+                                <div class="task-changes">
+                                    <div class="changes-header">Changes:</div>
+                                    <pre class="changes-content">${escapeHtml(task.changes.join('\n'))}</pre>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// format ansible host results
+function formatAnsibleHosts(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    const hostResults = extractAnsibleHostResults(text);
+    
+    if (Object.keys(hostResults).length === 0) {
+        return '<div class="no-output">No host results available</div>';
+    }
+    
+    return `
+        <div class="ansible-hosts-container">
+            <h4 class="ansible-hosts-header">Host Results</h4>
+            
+            <div class="hosts-grid">
+                ${Object.entries(hostResults).map(([host, result]) => `
+                    <div class="host-result-card">
+                        <div class="host-result-header">
+                            <span class="host-result-name">${host}</span>
+                            <span class="host-result-status ${result.overall_status}">${result.overall_status.toUpperCase()}</span>
+                        </div>
+                        
+                        <div class="host-result-stats">
+                            <div class="result-stat">
+                                <span class="stat-label">OK:</span>
+                                <span class="stat-value ansible-ok">${result.ok || 0}</span>
+                            </div>
+                            <div class="result-stat">
+                                <span class="stat-label">Changed:</span>
+                                <span class="stat-value ansible-changed">${result.changed || 0}</span>
+                            </div>
+                            <div class="result-stat">
+                                <span class="stat-label">Failed:</span>
+                                <span class="stat-value ansible-failed">${result.failed || 0}</span>
+                            </div>
+                            <div class="result-stat">
+                                <span class="stat-label">Skipped:</span>
+                                <span class="stat-value ansible-skipped">${result.skipped || 0}</span>
+                            </div>
+                            <div class="result-stat">
+                                <span class="stat-label">Unreachable:</span>
+                                <span class="stat-value ansible-unreachable">${result.unreachable || 0}</span>
+                            </div>
+                        </div>
+                        
+                        ${result.tasks && result.tasks.length > 0 ? `
+                            <div class="host-tasks">
+                                <div class="host-tasks-header">Tasks:</div>
+                                <div class="host-tasks-list">
+                                    ${result.tasks.slice(0, 5).map(task => `
+                                        <div class="host-task-item ${task.status}">
+                                            <span class="task-indicator"></span>
+                                            <span class="task-text">${task.name}</span>
+                                        </div>
+                                    `).join('')}
+                                    ${result.tasks.length > 5 ? `<div class="more-tasks">+${result.tasks.length - 5} more tasks</div>` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// format ansible variables
+function formatAnsibleVariables(data) {
+    const text = (data.stdout || '') + (data.stderr || '');
+    const variables = extractAnsibleVariables(text);
+    
+    if (Object.keys(variables).length === 0) {
+        return '<div class="no-output">No variable information available</div>';
+    }
+    
+    return `
+        <div class="ansible-variables-container">
+            <h4 class="ansible-variables-header">Variables & Facts</h4>
+            
+            <div class="variables-sections">
+                ${Object.entries(variables).map(([category, vars]) => `
+                    <div class="variable-section">
+                        <h5 class="variable-category">${category}</h5>
+                        <div class="variables-list">
+                            ${Object.entries(vars).slice(0, 10).map(([key, value]) => `
+                                <div class="variable-item">
+                                    <div class="variable-key">${key}</div>
+                                    <div class="variable-value">
+                                        ${typeof value === 'object' ? 
+                                          `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>` : 
+                                          escapeHtml(String(value))
+                                        }
+                                    </div>
+                                </div>
+                            `).join('')}
+                            ${Object.keys(vars).length > 10 ? `<div class="more-vars">+${Object.keys(vars).length - 10} more variables</div>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// format ansible console output
+function formatAnsibleConsole(data) {
+    if (!data.stdout && !data.stderr) {
+        return '<div class="no-output">No console output available</div>';
+    }
+    
+    let html = '';
+    
+    if (data.stdout) {
+        const formattedStdout = formatAnsibleLogOutput(data.stdout);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header">Standard Output</h4>
+                <pre class="ansible-console-output">${formattedStdout}</pre>
+            </div>
+        `;
+    }
+    
+    if (data.stderr) {
+        const formattedStderr = formatAnsibleLogOutput(data.stderr);
+        html += `
+            <div class="console-section">
+                <h4 class="console-header console-header-error">Standard Error</h4>
+                <pre class="ansible-console-output ansible-console-error">${formattedStderr}</pre>
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// format ansible log output with color coding
+function formatAnsibleLogOutput(text) {
+    if (!text) return '';
+    
+    let result = escapeHtml(text);
+    
+    // ansible status patterns with colors
+    result = result
+        .replace(/\b(PLAY RECAP)\b/g, '<span class="ansible-recap">$1</span>')
+        .replace(/\b(TASK|PLAY)\s*\[(.*?)\]/g, '<span class="ansible-task">$1</span> [<span class="ansible-task-name">$2</span>]')
+        .replace(/\b(ok|OK)\b/g, '<span class="ansible-ok">$1</span>')
+        .replace(/\b(changed|CHANGED)\b/g, '<span class="ansible-changed">$1</span>')
+        .replace(/\b(failed|FAILED|fatal)\b/g, '<span class="ansible-failed">$1</span>')
+        .replace(/\b(skipping|skipped|SKIPPED)\b/g, '<span class="ansible-skipped">$1</span>')
+        .replace(/\b(unreachable|UNREACHABLE)\b/g, '<span class="ansible-unreachable">$1</span>')
+        
+        // highlight ansible host references
+        .replace(/(\w+\.[\w.-]+|\d+\.\d+\.\d+\.\d+)\s*:/g, '<span class="ansible-host">$1</span>:')
+        
+        // highlight timing
+        .replace(/(\d+\.?\d*)\s*(s|sec|seconds?)\b/gi, '<span class="ansible-timing">$1$2</span>')
+        
+        // highlight json/yaml content
+        .replace(/(\{[^{}]*\})/g, '<span class="ansible-json">$1</span>')
+        .replace(/(---|\.\.\.|^[\s]*[-\w]+:)/gm, '<span class="ansible-yaml">$1</span>');
+    
+    return result;
+}
+
+// extraction functions for ansible data
+function extractAnsiblePlayResults(text) {
+    const playPattern = /PLAY \[(.*?)\]/g;
+    let plays = [];
+    let match;
+    
+    while ((match = playPattern.exec(text)) !== null) {
+        plays.push({
+            name: match[1],
+            status: text.includes('fatal:') ? 'failed' : 'ok',
+            tasks: 0,
+            hosts: 0
+        });
+    }
+    
+    return plays;
+}
+
+function extractAnsibleHostSummary(text) {
+    const recapPattern = /PLAY RECAP[\s\S]*?(?=\n\n|$)/;
+    const match = text.match(recapPattern);
+    
+    if (!match) return {};
+    
+    const recapText = match[0];
+    const hostPattern = /(\S+)\s+:\s+ok=(\d+)\s+changed=(\d+)(?:\s+unreachable=(\d+))?\s+failed=(\d+)(?:\s+skipped=(\d+))?/g;
+    let hosts = {};
+    let hostMatch;
+    
+    while ((hostMatch = hostPattern.exec(recapText)) !== null) {
+        hosts[hostMatch[1]] = {
+            ok: parseInt(hostMatch[2]),
+            changed: parseInt(hostMatch[3]),
+            unreachable: parseInt(hostMatch[4] || 0),
+            failed: parseInt(hostMatch[5]),
+            skipped: parseInt(hostMatch[6] || 0)
+        };
+    }
+    
+    return hosts;
+}
+
+function extractAnsibleTasks(text) {
+    const taskPattern = /TASK \[(.*?)\][\s\S]*?(?=TASK \[|PLAY \[|PLAY RECAP|$)/g;
+    let tasks = [];
+    let match;
+    
+    while ((match = taskPattern.exec(text)) !== null) {
+        const taskText = match[0];
+        const name = match[1];
+        
+        tasks.push({
+            name: name,
+            status: taskText.includes('failed:') ? 'failed' : 
+                   taskText.includes('changed:') ? 'changed' : 
+                   taskText.includes('skipping:') ? 'skipped' : 'ok',
+            module: extractModuleName(taskText),
+            hosts: extractTaskHosts(taskText),
+            changes: extractTaskChanges(taskText)
+        });
+    }
+    
+    return tasks;
+}
+
+function extractAnsibleHostResults(text) {
+    const hostSummary = extractAnsibleHostSummary(text);
+    const tasks = extractAnsibleTasks(text);
+    
+    let hostResults = {};
+    
+    Object.entries(hostSummary).forEach(([host, stats]) => {
+        hostResults[host] = {
+            ...stats,
+            overall_status: stats.failed > 0 ? 'failed' : 
+                           stats.changed > 0 ? 'changed' : 'ok',
+            tasks: tasks.filter(task => task.hosts.includes(host))
+        };
+    });
+    
+    return hostResults;
+}
+
+function extractAnsibleVariables(text) {
+    // basic variable extraction - could be enhanced based on actual ansible output format
+    return {
+        'Facts': extractAnsibleFacts(text),
+        'Variables': extractAnsibleVars(text)
+    };
+}
+
+function extractModuleName(taskText) {
+    const moduleMatch = taskText.match(/(\w+):\s*\{/);
+    return moduleMatch ? moduleMatch[1] : 'unknown';
+}
+
+function extractTaskHosts(taskText) {
+    const hostMatches = taskText.match(/(\w+[\w.-]*)\s*:/g);
+    return hostMatches ? hostMatches.map(h => h.replace(':', '')) : [];
+}
+
+function extractTaskChanges(taskText) {
+    const changePattern = /changed:\s*\[(.*?)\]/g;
+    let changes = [];
+    let match;
+    
+    while ((match = changePattern.exec(taskText)) !== null) {
+        changes.push(match[1]);
+    }
+    
+    return changes;
+}
+
+function extractAnsibleFacts(text) {
+    // extract common ansible facts from output
+    const facts = {};
+    const factPatterns = {
+        'ansible_os_family': /ansible_os_family['"]\s*:\s*['"]([^'"]+)['"]/,
+        'ansible_distribution': /ansible_distribution['"]\s*:\s*['"]([^'"]+)['"]/,
+        'ansible_python_version': /ansible_python_version['"]\s*:\s*['"]([^'"]+)['"]/
+    };
+    
+    Object.entries(factPatterns).forEach(([key, pattern]) => {
+        const match = text.match(pattern);
+        if (match) facts[key] = match[1];
+    });
+    
+    return facts;
+}
+
+function extractAnsibleVars(text) {
+    // extract ansible variables from output
+    const vars = {};
+    const varPattern = /(\w+)\s*:\s*([^,}\n]+)/g;
+    let match;
+    
+    while ((match = varPattern.exec(text)) !== null && Object.keys(vars).length < 10) {
+        if (!match[1].startsWith('ansible_')) {
+            vars[match[1]] = match[2].trim();
+        }
+    }
+    
+    return vars;
+}
+
+// switch between ansible output tabs
+function switchAnsibleTab(tabId, button) {
+    const container = button.closest('.ansible-tabs');
+    
+    const contents = container.querySelectorAll('.ansible-tab-content');
+    contents.forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    const buttons = container.querySelectorAll('.tab-button');
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    button.classList.add('active');
 }
 
 // close modal when clicking outside
