@@ -13,4 +13,6 @@ urlpatterns = [
     path("api/execution/<int:execution_id>/", views.api_execution_details, name="api_execution_details"),
     path("api/record-execution/", views.api_record_execution, name="api_record_execution"),
     path("api/execute/<str:service_name>/", views.api_execute_service, name="api_execute_service"),
+    path("api/queue/status/", views.api_queue_status, name="api_queue_status"),
+    path("api/queue/<int:queue_id>/cancel/", views.api_cancel_execution, name="api_cancel_execution"),
 ]
