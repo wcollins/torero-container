@@ -8,9 +8,13 @@ from typing import Any, Dict, List, Optional
 
 from dateutil import parser as date_parser
 from django.conf import settings
+from django.db import models, connection
 from django.utils import timezone
+import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from .models import ServiceExecution, ServiceInfo
+from .models import ServiceExecution, ServiceInfo, ExecutionQueue
 
 # logger with fallback for initialization issues
 def get_logger():
@@ -302,4 +306,139 @@ class DataCollectionService:
             "failure_count": failure_count,
             "success_rate": success_rate,
             "avg_duration_seconds": avg_duration,
+        }
+
+
+class ExecutionQueueService:
+    """service for managing execution queue and progress tracking."""
+    
+    # class-level lock and executor to ensure single execution
+    _executor = ThreadPoolExecutor(max_workers=1)  # only 1 worker for sequential execution
+    _processing = False
+    _lock = threading.Lock()
+    
+    def __init__(self):
+        # don't create cli_client here - create fresh one per execution
+        pass
+        
+    def add_to_queue(self, service_name: str, service_type: str, operation: Optional[str] = None) -> ExecutionQueue:
+        """add service to execution queue."""
+        # calculate estimated duration from historical data
+        avg_duration = ServiceExecution.objects.filter(
+            service_name=service_name,
+            status='success'
+        ).aggregate(avg=models.Avg('duration_seconds'))['avg']
+        
+        queue_item = ExecutionQueue.objects.create(
+            service_name=service_name,
+            service_type=service_type,
+            operation=operation,
+            estimated_duration=int(avg_duration) if avg_duration else None
+        )
+        
+        # start processing queue if not already running
+        self._ensure_queue_processor()
+        return queue_item
+    
+    def _ensure_queue_processor(self):
+        """ensure queue processor is running."""
+        with self._lock:
+            if not self._processing:
+                self._processing = True
+                self._executor.submit(self._process_queue_loop)
+    
+    def _process_queue_loop(self):
+        """continuously process queue items one at a time."""
+        try:
+            while True:
+                # close any stale db connections
+                connection.close_if_unusable_or_obsolete()
+                
+                # check if there's anything to process
+                next_item = ExecutionQueue.objects.filter(status=ExecutionQueue.QUEUED).first()
+                if not next_item:
+                    break  # no more items to process
+                
+                # mark as running
+                next_item.status = ExecutionQueue.RUNNING
+                next_item.started_at = timezone.now()
+                next_item.save()
+                
+                # execute the service (blocking)
+                self._execute_service_sync(next_item.id)
+                
+        finally:
+            with self._lock:
+                self._processing = False
+            # close db connection when done
+            connection.close()
+    
+    def _execute_service_sync(self, queue_item_id: int):
+        """execute service synchronously."""
+        try:
+            # refresh from database to get latest state
+            queue_item = ExecutionQueue.objects.get(id=queue_item_id)
+            
+            # create fresh CLI client for this execution
+            cli_client = ToreroCliClient()
+            
+            # log execution start
+            logger.info(f"starting execution: {queue_item.service_name} ({queue_item.service_type})")
+            
+            # execute via cli client
+            result = cli_client.execute_service(
+                service_name=queue_item.service_name,
+                service_type=queue_item.service_type,
+                operation=queue_item.operation
+            )
+            
+            # log execution result
+            logger.info(f"execution result for {queue_item.service_name}: {result}")
+            
+            # update status based on result
+            queue_item.status = ExecutionQueue.COMPLETED if result else ExecutionQueue.FAILED
+            queue_item.completed_at = timezone.now()
+            queue_item.save()
+            
+        except Exception as e:
+            logger.error(f"error executing service (id={queue_item_id}): {e}")
+            try:
+                queue_item = ExecutionQueue.objects.get(id=queue_item_id)
+                queue_item.status = ExecutionQueue.FAILED
+                queue_item.completed_at = timezone.now()
+                queue_item.save()
+            except Exception as save_error:
+                logger.error(f"failed to update queue item status: {save_error}")
+    
+    def cancel_execution(self, queue_id: int) -> bool:
+        """cancel a queued execution (cannot cancel running due to CLI limitations)."""
+        try:
+            queue_item = ExecutionQueue.objects.get(id=queue_id)
+            
+            # can only cancel queued items - running items must complete
+            if queue_item.status == ExecutionQueue.QUEUED:
+                queue_item.status = ExecutionQueue.CANCELLED
+                queue_item.completed_at = timezone.now()
+                queue_item.save()
+                return True
+            return False
+            
+        except ExecutionQueue.DoesNotExist:
+            return False
+    
+    def get_queue_status(self) -> Dict[str, Any]:
+        """get current queue status."""
+        running = ExecutionQueue.objects.filter(status=ExecutionQueue.RUNNING)
+        queued = ExecutionQueue.objects.filter(status=ExecutionQueue.QUEUED)
+        completed = ExecutionQueue.objects.filter(
+            status__in=[ExecutionQueue.COMPLETED, ExecutionQueue.FAILED, ExecutionQueue.CANCELLED]
+        ).order_by('-completed_at')[:10]
+        
+        return {
+            'running': list(running.values()),
+            'queued': list(queued.values()),
+            'completed': list(completed.values()),
+            'running_count': running.count(),
+            'queued_count': queued.count(),
+            'completed_count': completed.count()
         }
