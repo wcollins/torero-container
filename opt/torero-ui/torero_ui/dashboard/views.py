@@ -11,8 +11,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 
-from .models import ServiceExecution, ServiceInfo
-from .services import DataCollectionService, ToreroCliClient
+from .models import ServiceExecution, ServiceInfo, ExecutionQueue
+from .services import DataCollectionService, ToreroCliClient, ExecutionQueueService
 
 # logger with fallback for initialization issues
 def get_logger():
@@ -200,7 +200,7 @@ def api_record_execution(request):
 
 @require_http_methods(["POST"])
 def api_execute_service(request, service_name):
-    """execute service via torero cli."""
+    """add service execution to queue."""
 
     try:
         # get service info
@@ -215,33 +215,23 @@ def api_execute_service(request, service_name):
             except json.JSONDecodeError:
                 pass
         
-        # execute via cli client
-        cli_client = ToreroCliClient()
-        result = cli_client.execute_service(
+        # add to execution queue
+        queue_service = ExecutionQueueService()
+        queue_item = queue_service.add_to_queue(
             service_name=service_name,
             service_type=service_info.service_type,
             operation=operation
         )
         
-        if result:
-            return JsonResponse({
-                'status': 'started',
-                'message': f'execution started for {service_name}'
-            })
-        else:
-            # provide more detailed error message
-            error_msg = f'failed to start execution for {service_name} (type: {service_info.service_type})'
-            logger.error(error_msg)
-            logger.error(f'cli client returned None for service: {service_name}')
-            
-            # check if it's a common issue
-            if not hasattr(settings, 'TORERO_CLI_TIMEOUT'):
-                logger.warning('TORERO_CLI_TIMEOUT not configured, using default')
-            
-            return JsonResponse({
-                'status': 'error',
-                'message': f'{error_msg} - check server logs for details'
-            }, status=500)
+        return JsonResponse({
+            'status': 'queued',
+            'message': f'execution queued for {service_name}',
+            'queue_id': queue_item.id,
+            'position': ExecutionQueue.objects.filter(
+                status=ExecutionQueue.QUEUED,
+                created_at__lt=queue_item.created_at
+            ).count() + 1
+        })
             
     except ServiceInfo.DoesNotExist:
         return JsonResponse({
@@ -253,3 +243,23 @@ def api_execute_service(request, service_name):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def api_queue_status(request):
+    """get current queue status."""
+    queue_service = ExecutionQueueService()
+    status = queue_service.get_queue_status()
+    return JsonResponse(status)
+
+
+@require_http_methods(["POST"])
+def api_cancel_execution(request, queue_id):
+    """cancel a queued execution."""
+    queue_service = ExecutionQueueService()
+    success = queue_service.cancel_execution(int(queue_id))
+    
+    if success:
+        return JsonResponse({'status': 'success', 'message': 'execution cancelled'})
+    else:
+        return JsonResponse({'status': 'error', 'message': 'can only cancel queued executions'}, status=400)
