@@ -179,6 +179,37 @@ function updateServiceStatus(services) {
                 <span class="status-label">Success Rate:</span>
                 <span class="status-success">${service.success_rate.toFixed(1)}%</span>
             </div>
+            <div class="service-actions">
+                ${service.service_type === 'opentofu-plan' ? `
+                    <div class="execute-dropdown">
+                        <button class="execute-btn dropdown-toggle" onclick="toggleExecuteDropdown(this)">
+                            <span class="btn-text">Execute</span>
+                            <span class="btn-spinner" style="display: none;">
+                                <span class="spinner"></span> Executing...
+                            </span>
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="dropdown-menu">
+                            <button class="dropdown-item" onclick="executeOpenTofu('${service.name}', 'apply', this)">
+                                Apply
+                            </button>
+                            <button class="dropdown-item destroy-option" onclick="executeOpenTofu('${service.name}', 'destroy', this)">
+                                Destroy
+                            </button>
+                        </div>
+                    </div>
+                ` : `
+                    <button class="execute-btn" onclick="executeService('${service.name}', this)">
+                        <span class="btn-text">Execute</span>
+                        <span class="btn-spinner" style="display: none;">
+                            <span class="spinner"></span> Executing...
+                        </span>
+                    </button>
+                `}
+                <button class="history-btn" onclick="showServiceHistory('${service.name}')">
+                    History
+                </button>
+            </div>
         `;
         
         container.appendChild(card);
@@ -472,40 +503,13 @@ function formatOpenTofuOutput(executionData) {
     // parse the data if it's a string
     const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
     
-    // generate unique ids for tabs within this execution
-    const tabPrefix = 'tofu-' + Date.now();
-    
     return `
-        <div class="opentofu-tabs mt-20">
-            <div class="tab-buttons">
-                <button class="tab-button active" onclick="switchOpenTofuTab('${tabPrefix}-output', this)">Console Output</button>
-                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-state', this)">State</button>
-                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-outputs', this)">Outputs</button>
-                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-timing', this)">Timing</button>
-                <button class="tab-button" onclick="switchOpenTofuTab('${tabPrefix}-raw', this)">Raw Data</button>
-            </div>
-            
-            <div id="${tabPrefix}-output" class="opentofu-tab-content active">
+        <div class="opentofu-output mt-20">
+            <h3 class="text-info mb-10">Console Output</h3>
+            <div class="opentofu-console">
                 ${formatConsoleOutput(data)}
             </div>
-            
-            <div id="${tabPrefix}-state" class="opentofu-tab-content">
-                ${formatStateFile(data.state_file)}
-            </div>
-            
-            <div id="${tabPrefix}-outputs" class="opentofu-tab-content">
-                ${formatTofuOutputs(data.state_file?.outputs)}
-            </div>
-            
-            <div id="${tabPrefix}-timing" class="opentofu-tab-content">
-                ${formatTimingInfo(data)}
-            </div>
-            
-            <div id="${tabPrefix}-raw" class="opentofu-tab-content">
-                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
-            </div>
-        </div>
-    `;
+        </div>`;
 }
 
 // format console output with ansi to html conversion using dracula theme
@@ -825,39 +829,14 @@ function switchOpenTofuTab(tabId, button) {
 // python script output formatting functions
 function formatPythonOutput(executionData) {
     const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
-    const tabPrefix = 'python-' + Date.now();
     
     return `
-        <div class="python-tabs mt-20">
-            <div class="tab-buttons">
-                <button class="tab-button active" onclick="switchPythonTab('${tabPrefix}-output', this)">Console Output</button>
-                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-stacktrace', this)">Stack Trace</button>
-                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-performance', this)">Performance</button>
-                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-environment', this)">Environment</button>
-                <button class="tab-button" onclick="switchPythonTab('${tabPrefix}-raw', this)">Raw Data</button>
-            </div>
-            
-            <div id="${tabPrefix}-output" class="python-tab-content active">
+        <div class="python-output mt-20">
+            <h3 class="text-info mb-10">Console Output</h3>
+            <div class="python-console">
                 ${formatPythonConsoleOutput(data)}
             </div>
-            
-            <div id="${tabPrefix}-stacktrace" class="python-tab-content">
-                ${formatPythonStackTrace(data)}
-            </div>
-            
-            <div id="${tabPrefix}-performance" class="python-tab-content">
-                ${formatPythonPerformance(data)}
-            </div>
-            
-            <div id="${tabPrefix}-environment" class="python-tab-content">
-                ${formatPythonEnvironment(data)}
-            </div>
-            
-            <div id="${tabPrefix}-raw" class="python-tab-content">
-                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
-            </div>
-        </div>
-    `;
+        </div>`;
 }
 
 // format python console output with log level detection
@@ -1158,44 +1137,43 @@ function switchPythonTab(tabId, button) {
 // ansible playbook output formatting functions
 function formatAnsibleOutput(executionData) {
     const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
-    const tabPrefix = 'ansible-' + Date.now();
     
     return `
-        <div class="ansible-tabs mt-20">
-            <div class="tab-buttons">
-                <button class="tab-button active" onclick="switchAnsibleTab('${tabPrefix}-summary', this)">Play Summary</button>
-                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-tasks', this)">Task Details</button>
-                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-hosts', this)">Host Results</button>
-                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-variables', this)">Variables</button>
-                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-console', this)">Console Log</button>
-                <button class="tab-button" onclick="switchAnsibleTab('${tabPrefix}-raw', this)">Raw Data</button>
+        <div class="ansible-output mt-20">
+            <h3 class="text-info mb-10">Console Output</h3>
+            <div class="ansible-console">
+                ${formatAnsibleConsoleOutput(data)}
             </div>
-            
-            <div id="${tabPrefix}-summary" class="ansible-tab-content active">
-                ${formatAnsibleSummary(data)}
+        </div>`;
+}
+
+// format ansible console output
+function formatAnsibleConsoleOutput(data) {
+    if (!data.stdout && !data.stderr) {
+        return '<div class="no-output">No console output available</div>';
+    }
+    
+    let html = '';
+    
+    if (data.stdout) {
+        html += `
+            <div class="console-section">
+                <h4 class="console-header">Standard Output</h4>
+                <pre class="ansible-console-output">${escapeHtml(data.stdout)}</pre>
             </div>
-            
-            <div id="${tabPrefix}-tasks" class="ansible-tab-content">
-                ${formatAnsibleTasks(data)}
+        `;
+    }
+    
+    if (data.stderr) {
+        html += `
+            <div class="console-section">
+                <h4 class="console-header console-header-error">Standard Error</h4>
+                <pre class="ansible-console-output ansible-console-error">${escapeHtml(data.stderr)}</pre>
             </div>
-            
-            <div id="${tabPrefix}-hosts" class="ansible-tab-content">
-                ${formatAnsibleHosts(data)}
-            </div>
-            
-            <div id="${tabPrefix}-variables" class="ansible-tab-content">
-                ${formatAnsibleVariables(data)}
-            </div>
-            
-            <div id="${tabPrefix}-console" class="ansible-tab-content">
-                ${formatAnsibleConsole(data)}
-            </div>
-            
-            <div id="${tabPrefix}-raw" class="ansible-tab-content">
-                <pre class="execution-output">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
-            </div>
-        </div>
-    `;
+        `;
+    }
+    
+    return html;
 }
 
 // format ansible play summary
@@ -1656,3 +1634,204 @@ window.onclick = function(event) {
         closeExecutionModal();
     }
 };
+
+// toggle execute dropdown for opentofu services
+function toggleExecuteDropdown(button) {
+    const dropdown = button.nextElementSibling;
+    const isOpen = dropdown.classList.contains('show');
+    
+    // close all other dropdowns first
+    document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+        menu.previousElementSibling.classList.remove('open');
+    });
+    
+    // toggle this dropdown
+    if (!isOpen) {
+        dropdown.classList.add('show');
+        button.classList.add('open');
+    }
+}
+
+// close dropdowns when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.execute-dropdown')) {
+        document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+            menu.classList.remove('show');
+            menu.previousElementSibling.classList.remove('open');
+        });
+    }
+});
+
+// execute opentofu service with specific operation
+async function executeOpenTofu(serviceName, operation, button) {
+    // close the dropdown
+    const dropdown = button.closest('.dropdown-menu');
+    const toggleButton = dropdown.previousElementSibling;
+    dropdown.classList.remove('show');
+    toggleButton.classList.remove('open');
+    
+    // update toggle button state to executing
+    const btnText = toggleButton.querySelector('.btn-text');
+    const btnSpinner = toggleButton.querySelector('.btn-spinner');
+    const btnArrow = toggleButton.querySelector('.dropdown-arrow');
+    
+    btnText.style.display = 'none';
+    btnArrow.style.display = 'none';
+    btnSpinner.style.display = 'inline-flex';
+    toggleButton.disabled = true;
+    
+    try {
+        const response = await fetch(`/api/execute/${serviceName}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                operation: operation
+            }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'started') {
+            // show success feedback on the card
+            showExecutionFeedback(toggleButton, 'success', `${operation} started`);
+            
+            // refresh dashboard after short delay to show new execution
+            setTimeout(() => {
+                refreshDashboard();
+            }, 2000);
+            
+        } else {
+            showExecutionFeedback(toggleButton, 'error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('execution error:', error);
+        showExecutionFeedback(toggleButton, 'error', 'network error');
+    }
+}
+
+// execute service functionality
+async function executeService(serviceName, button) {
+    // update button state to executing
+    const btnText = button.querySelector('.btn-text');
+    const btnSpinner = button.querySelector('.btn-spinner');
+    
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-flex';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch(`/api/execute/${serviceName}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'started') {
+            // show success feedback
+            showExecutionFeedback(button, 'success', 'execution started');
+            
+            // refresh dashboard after short delay to show new execution
+            setTimeout(() => {
+                refreshDashboard();
+            }, 2000);
+            
+        } else {
+            showExecutionFeedback(button, 'error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('execution error:', error);
+        showExecutionFeedback(button, 'error', 'network error');
+    }
+}
+
+// show execution feedback on service card
+function showExecutionFeedback(button, type, message) {
+    const card = button.closest('.status-card');
+    
+    // add visual feedback class
+    card.classList.add(`execution-${type}`);
+    
+    // reset button
+    resetExecuteButton(button);
+    
+    // remove feedback after 2 seconds
+    setTimeout(() => {
+        card.classList.remove(`execution-${type}`);
+    }, 2000);
+    
+    // show toast notification
+    showToast(message, type);
+}
+
+// reset execute button to default state
+function resetExecuteButton(button) {
+    const btnText = button.querySelector('.btn-text');
+    const btnSpinner = button.querySelector('.btn-spinner');
+    const btnArrow = button.querySelector('.dropdown-arrow');
+    
+    btnText.style.display = 'inline';
+    btnSpinner.style.display = 'none';
+    if (btnArrow) {
+        btnArrow.style.display = 'inline';
+    }
+    button.disabled = false;
+}
+
+// show service history (placeholder for future implementation)
+function showServiceHistory(serviceName) {
+    showToast(`history for ${serviceName} (coming soon)`, 'info');
+}
+
+// show toast notification
+function showToast(message, type = 'info') {
+    // create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    
+    // add to page
+    document.body.appendChild(toast);
+    
+    // show toast
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 100);
+    
+    // hide and remove toast
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
+
+// get csrf token for requests
+function getCsrfToken() {
+    // get from django's hidden csrf input
+    const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfInput) {
+        return csrfInput.value;
+    }
+    
+    // fallback to cookie method
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrftoken') {
+            return value;
+        }
+    }
+    
+    return '';
+}
