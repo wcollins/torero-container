@@ -1812,3 +1812,218 @@ body {
 .mb-20 { margin-bottom: 20px; }
 .mt-10 { margin-top: 10px; }
 .mt-20 { margin-top: 20px; }
+
+/* execution queue panel */
+.execution-panel {
+    background-color: #111;
+    border: 1px solid #333;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #0a0a0a;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.panel-header:hover {
+    background-color: #1a1a1a;
+}
+
+.panel-title {
+    color: #5cfcfe;
+    font-family: 'Consolas', monospace;
+    font-size: 14px;
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.panel-toggle {
+    display: inline-block;
+    width: 15px;
+    transition: transform 0.3s ease;
+}
+
+.execution-panel.collapsed .panel-toggle {
+    transform: rotate(-90deg);
+}
+
+.panel-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid #5cfcfe;
+    color: #5cfcfe;
+    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-icon:hover {
+    background: #5cfcfe;
+    color: #000;
+}
+
+.panel-content {
+    padding: 20px;
+    background-color: #0a0a0a;
+}
+
+.execution-section {
+    margin-bottom: 30px;
+}
+
+.execution-section:last-child {
+    margin-bottom: 0;
+}
+
+.execution-section h4 {
+    color: #ccff00;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+}
+
+.execution-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.empty-message {
+    color: #888;
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+    background: #111;
+    border: 1px dashed #333;
+    border-radius: 4px;
+}
+
+.execution-item {
+    background: #111;
+    border: 1px solid #333;
+    padding: 15px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.execution-item:hover {
+    border-color: #5cfcfe;
+    background: #1a1a1a;
+}
+
+.execution-item.status-running {
+    border-left: 3px solid #5cfcfe;
+}
+
+.execution-item.status-queued {
+    border-left: 3px solid #d79921;
+}
+
+.execution-item.status-completed {
+    border-left: 3px solid #ccff00;
+}
+
+.execution-item.status-failed {
+    border-left: 3px solid #ff4444;
+}
+
+.execution-item.status-cancelled {
+    border-left: 3px solid #888;
+}
+
+.execution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.service-name {
+    color: #ccff00;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.service-type {
+    color: #5cfcfe;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.btn-cancel {
+    background: none;
+    border: 1px solid #ff4444;
+    color: #ff4444;
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-cancel:hover {
+    background: #ff4444;
+    color: #fff;
+}
+
+.execution-details {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.queue-position {
+    color: #d79921;
+    font-weight: bold;
+}
+
+.timing-info {
+    color: #888;
+}
+
+.operation {
+    color: #5cfcfe;
+    font-style: italic;
+}
+
+.progress-bar {
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #5cfcfe 0%, #ccff00 100%);
+    transition: width 0.5s ease;
+    animation: progress-pulse 2s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
