@@ -12,7 +12,17 @@ from django.utils import timezone
 
 from .models import ServiceExecution, ServiceInfo
 
-logger = logging.getLogger(__name__)
+# logger with fallback for initialization issues
+def get_logger():
+    try:
+        return logging.getLogger(__name__)
+    except:
+
+        # fallback to basic logging if django logging not initialized
+        logging.basicConfig(level=logging.INFO)
+        return logging.getLogger(__name__)
+
+logger = get_logger()
 
 
 class ToreroCliClient:
@@ -21,6 +31,15 @@ class ToreroCliClient:
     def __init__(self) -> None:
         self.torero_command = "torero"
         self.timeout = getattr(settings, 'TORERO_CLI_TIMEOUT', 30)
+        
+        # check if torero is available
+        try:
+            result = subprocess.run([self.torero_command, "version"], 
+                                  capture_output=True, text=True, timeout=5, check=False)
+            if result.returncode != 0:
+                logger.warning(f"torero command may not be available: {result.stderr}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.error(f"torero command not found or not responding: {e}")
     
     def _execute_command(self, args: List[str]) -> Optional[Dict[str, Any]]:
         """execute torero cli command and return parsed json output."""
@@ -39,9 +58,13 @@ class ToreroCliClient:
                     return json.loads(result.stdout)
                 except json.JSONDecodeError:
                     logger.warning(f"failed to parse json from torero output: {result.stdout[:200]}")
+                    logger.warning(f"command was: {' '.join(command)}")
                     return None
             else:
-                logger.error(f"torero command failed: {' '.join(command)}\nError: {result.stderr}")
+                logger.error(f"torero command failed: {' '.join(command)}")
+                logger.error(f"return code: {result.returncode}")
+                logger.error(f"stdout: {result.stdout[:500] if result.stdout else 'None'}")
+                logger.error(f"stderr: {result.stderr[:500] if result.stderr else 'None'}")
                 return None
                 
         except subprocess.TimeoutExpired:
@@ -53,24 +76,33 @@ class ToreroCliClient:
     
     def get_services(self) -> List[Dict[str, Any]]:
         """get list of all services from torero cli."""
+
         data = self._execute_command(["get", "services"])
         if data and isinstance(data, dict) and "services" in data:
             return data["services"] if isinstance(data["services"], list) else []
         return []
     
     def get_service_details(self, service_name: str) -> Optional[Dict[str, Any]]:
+
         """get details for specific service from torero cli."""
         return self._execute_command(["describe", "service", service_name])
     
     def execute_service(self, service_name: str, service_type: str, **params: Any) -> Optional[Dict[str, Any]]:
         """execute a service via torero cli."""
+
+        # extract operation parameter for opentofu
+        operation = params.pop('operation', None)
+        
         # build command based on service type
         if service_type == "ansible-playbook":
             command = ["run", "service", "ansible-playbook", service_name]
         elif service_type == "python-script":
             command = ["run", "service", "python-script", service_name]
         elif service_type == "opentofu-plan":
-            command = ["run", "service", "opentofu-plan", service_name]
+
+            # use provided operation or default to apply
+            op = operation if operation in ['apply', 'destroy'] else 'apply'
+            command = ["run", "service", "opentofu-plan", op, service_name]
         else:
             logger.error(f"unsupported service type: {service_type}")
             return None
@@ -79,7 +111,25 @@ class ToreroCliClient:
         for key, value in params.items():
             command.extend([f"--{key}", str(value)])
         
-        return self._execute_command(command)
+        logger.info(f"executing torero command: {' '.join(command)}")
+        
+        # quick connectivity check before executing
+        try:
+            version_check = subprocess.run([self.torero_command, "version"], 
+                                         capture_output=True, text=True, timeout=5, check=False)
+            if version_check.returncode != 0:
+                logger.error(f"torero connectivity check failed before execution: {version_check.stderr}")
+                return None
+        except Exception as e:
+            logger.error(f"torero connectivity check failed: {e}")
+            return None
+        
+        result = self._execute_command(command)
+        
+        if result is None:
+            logger.error(f"execution failed for service {service_name} (type: {service_type})")
+        
+        return result
 
 
 class DataCollectionService:
