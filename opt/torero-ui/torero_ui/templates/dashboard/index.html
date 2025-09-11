@@ -102,6 +102,51 @@
     </div>
 </div>
 
+<!-- execution queue panel -->
+<div class="section">
+    <div id="execution-panel" class="execution-panel">
+        <div class="panel-header" onclick="toggleExecutionPanel()">
+            <span class="panel-title">
+                <span class="panel-toggle">▼</span>
+                Running (<span id="active-count">0</span>) | 
+                Queued (<span id="queued-count">0</span>) | 
+                Completed (<span id="completed-count">0</span>)
+            </span>
+            <div class="panel-controls">
+                <button class="btn-icon" onclick="event.stopPropagation(); refreshQueueStatus();" title="Refresh">
+                    ↻
+                </button>
+            </div>
+        </div>
+        
+        <div class="panel-content" id="panel-content">
+            <!-- running executions -->
+            <div id="running-executions" class="execution-section">
+                <h4>Running</h4>
+                <div class="execution-list" id="running-list">
+                    <!-- dynamic content -->
+                </div>
+            </div>
+            
+            <!-- queued executions -->
+            <div id="queued-executions" class="execution-section">
+                <h4>Queued</h4>
+                <div class="execution-list" id="queued-list">
+                    <!-- dynamic content -->
+                </div>
+            </div>
+            
+            <!-- completed executions -->
+            <div id="completed-executions" class="execution-section">
+                <h4>Recently Completed</h4>
+                <div class="execution-list" id="completed-list">
+                    <!-- dynamic content -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- execution history tabs -->
 <div class="section">
     <div class="section-title">Execution History</div>

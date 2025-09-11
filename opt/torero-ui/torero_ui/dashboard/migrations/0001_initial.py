@@ -55,4 +55,25 @@ class Migration(migrations.Migration):
                 'indexes': [models.Index(fields=['service_name', '-started_at'], name='dashboard_s_service_b83d1c_idx'), models.Index(fields=['service_type', '-started_at'], name='dashboard_s_service_a957b3_idx'), models.Index(fields=['status', '-started_at'], name='dashboard_s_status_890d8a_idx')],
             },
         ),
+        migrations.CreateModel(
+            name='ExecutionQueue',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('service_name', models.CharField(max_length=255)),
+                ('service_type', models.CharField(max_length=100)),
+                ('status', models.CharField(choices=[('queued', 'Queued'), ('running', 'Running'), ('completed', 'Completed'), ('cancelled', 'Cancelled'), ('failed', 'Failed')], default='queued', max_length=20)),
+                ('priority', models.IntegerField(default=0)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('started_at', models.DateTimeField(blank=True, null=True)),
+                ('completed_at', models.DateTimeField(blank=True, null=True)),
+                ('progress_percent', models.IntegerField(default=0)),
+                ('estimated_duration', models.IntegerField(blank=True, null=True)),
+                ('execution_id', models.CharField(blank=True, max_length=255, null=True)),
+                ('operation', models.CharField(blank=True, max_length=50, null=True)),
+            ],
+            options={
+                'ordering': ['priority', 'created_at'],
+                'indexes': [models.Index(fields=['status', 'priority', 'created_at'], name='dashboard_e_status_8d8a1e_idx'), models.Index(fields=['service_name', '-created_at'], name='dashboard_e_service_5d4b9f_idx')],
+            },
+        ),
     ]
