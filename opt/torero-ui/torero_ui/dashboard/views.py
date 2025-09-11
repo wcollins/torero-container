@@ -1,6 +1,7 @@
 """views for torero dashboard."""
 
 import json
+import logging
 from typing import Any, Dict
 
 from django.conf import settings
@@ -11,7 +12,19 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 
 from .models import ServiceExecution, ServiceInfo
-from .services import DataCollectionService
+from .services import DataCollectionService, ToreroCliClient
+
+# logger with fallback for initialization issues
+def get_logger():
+    try:
+        return logging.getLogger(__name__)
+    except:
+
+        # fallback to basic logging if django logging not initialized
+        logging.basicConfig(level=logging.INFO)
+        return logging.getLogger(__name__)
+
+logger = get_logger()
 
 
 class DashboardView(TemplateView):
@@ -109,6 +122,7 @@ def api_dashboard_data(request):
 @require_http_methods(["POST"])
 def api_sync_services(request):
     """api endpoint to trigger service sync."""
+
     try:
         data_service = DataCollectionService()
         data_service.sync_services()
@@ -120,6 +134,7 @@ def api_sync_services(request):
 @require_http_methods(["GET"])
 def api_execution_details(request, execution_id):
     """api endpoint for execution details."""
+
     try:
         execution = ServiceExecution.objects.get(id=execution_id)
         
@@ -147,6 +162,7 @@ def api_execution_details(request, execution_id):
 @require_http_methods(["POST"])
 def api_record_execution(request):
     """API endpoint to record execution data from torero-api."""
+
     try:
         data = json.loads(request.body)
         service_name = data.get('service_name')
@@ -180,3 +196,60 @@ def api_record_execution(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def api_execute_service(request, service_name):
+    """execute service via torero cli."""
+
+    try:
+        # get service info
+        service_info = ServiceInfo.objects.get(name=service_name)
+        
+        # parse request body for additional parameters
+        operation = None
+        if request.body:
+            try:
+                data = json.loads(request.body)
+                operation = data.get('operation')
+            except json.JSONDecodeError:
+                pass
+        
+        # execute via cli client
+        cli_client = ToreroCliClient()
+        result = cli_client.execute_service(
+            service_name=service_name,
+            service_type=service_info.service_type,
+            operation=operation
+        )
+        
+        if result:
+            return JsonResponse({
+                'status': 'started',
+                'message': f'execution started for {service_name}'
+            })
+        else:
+            # provide more detailed error message
+            error_msg = f'failed to start execution for {service_name} (type: {service_info.service_type})'
+            logger.error(error_msg)
+            logger.error(f'cli client returned None for service: {service_name}')
+            
+            # check if it's a common issue
+            if not hasattr(settings, 'TORERO_CLI_TIMEOUT'):
+                logger.warning('TORERO_CLI_TIMEOUT not configured, using default')
+            
+            return JsonResponse({
+                'status': 'error',
+                'message': f'{error_msg} - check server logs for details'
+            }, status=500)
+            
+    except ServiceInfo.DoesNotExist:
+        return JsonResponse({
+            'status': 'error', 
+            'message': 'service not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
