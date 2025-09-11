@@ -59,6 +59,37 @@
                 <span class="status-label">Success Rate:</span>
                 <span class="status-success">{{ service.success_rate|floatformat:1 }}%</span>
             </div>
+            <div class="service-actions">
+                {% if service.service_type == "opentofu-plan" %}
+                <div class="execute-dropdown">
+                    <button class="execute-btn dropdown-toggle" onclick="toggleExecuteDropdown(this)">
+                        <span class="btn-text">Execute</span>
+                        <span class="btn-spinner" style="display: none;">
+                            <span class="spinner"></span> Executing...
+                        </span>
+                        <span class="dropdown-arrow">▼</span>
+                    </button>
+                    <div class="dropdown-menu">
+                        <button class="dropdown-item" onclick="executeOpenTofu('{{ service.name }}', 'apply', this)">
+                            Apply
+                        </button>
+                        <button class="dropdown-item destroy-option" onclick="executeOpenTofu('{{ service.name }}', 'destroy', this)">
+                            Destroy
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <button class="execute-btn" onclick="executeService('{{ service.name }}', this)">
+                    <span class="btn-text">Execute</span>
+                    <span class="btn-spinner" style="display: none;">
+                        <span class="spinner"></span> Executing...
+                    </span>
+                </button>
+                {% endif %}
+                <button class="history-btn" onclick="showServiceHistory('{{ service.name }}')">
+                    History
+                </button>
+            </div>
         </div>
         {% empty %}
         <div class="status-card">
