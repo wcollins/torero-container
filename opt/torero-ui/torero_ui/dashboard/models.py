@@ -58,6 +58,46 @@ class ServiceExecution(models.Model):
         return f"{self.duration_seconds:.2f}s"
 
 
+class ExecutionQueue(models.Model):
+    """manages execution queue for services."""
+    
+    QUEUED = 'queued'
+    RUNNING = 'running'
+    COMPLETED = 'completed'
+    CANCELLED = 'cancelled'
+    FAILED = 'failed'
+    
+    STATUS_CHOICES = [
+        (QUEUED, 'Queued'),
+        (RUNNING, 'Running'),
+        (COMPLETED, 'Completed'),
+        (CANCELLED, 'Cancelled'),
+        (FAILED, 'Failed'),
+    ]
+    
+    service_name = models.CharField(max_length=255)
+    service_type = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=QUEUED)
+    priority = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    progress_percent = models.IntegerField(default=0)
+    estimated_duration = models.IntegerField(null=True, blank=True)  # seconds
+    execution_id = models.CharField(max_length=255, null=True, blank=True)
+    operation = models.CharField(max_length=50, null=True, blank=True)  # for opentofu apply/destroy
+    
+    class Meta:
+        ordering = ['priority', 'created_at']
+        indexes = [
+            models.Index(fields=['status', 'priority', 'created_at']),
+            models.Index(fields=['service_name', '-created_at']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.service_name} ({self.status}) - {self.created_at}"
+
+
 class ServiceInfo(models.Model):
     """stores service information from torero api."""
     
