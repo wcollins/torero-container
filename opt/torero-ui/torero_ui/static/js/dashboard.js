@@ -1695,14 +1695,18 @@ async function executeOpenTofu(serviceName, operation, button) {
         
         const result = await response.json();
         
-        if (result.status === 'started') {
+        if (result.status === 'queued' || result.status === 'started') {
             // show success feedback on the card
-            showExecutionFeedback(toggleButton, 'success', `${operation} started`);
+            const message = result.status === 'queued' ? 
+                `${operation} queued (position ${result.position || 1})` : 
+                `${operation} started`;
+            showExecutionFeedback(toggleButton, 'success', message);
             
-            // refresh dashboard after short delay to show new execution
+            // refresh dashboard and queue after short delay
             setTimeout(() => {
                 refreshDashboard();
-            }, 2000);
+                refreshQueueStatus();
+            }, 1000);
             
         } else {
             showExecutionFeedback(toggleButton, 'error', result.message);
@@ -1735,14 +1739,18 @@ async function executeService(serviceName, button) {
         
         const result = await response.json();
         
-        if (result.status === 'started') {
+        if (result.status === 'queued' || result.status === 'started') {
             // show success feedback
-            showExecutionFeedback(button, 'success', 'execution started');
+            const message = result.status === 'queued' ? 
+                `execution queued (position ${result.position || 1})` : 
+                'execution started';
+            showExecutionFeedback(button, 'success', message);
             
-            // refresh dashboard after short delay to show new execution
+            // refresh dashboard and queue after short delay
             setTimeout(() => {
                 refreshDashboard();
-            }, 2000);
+                refreshQueueStatus();
+            }, 1000);
             
         } else {
             showExecutionFeedback(button, 'error', result.message);
@@ -1835,3 +1843,178 @@ function getCsrfToken() {
     
     return '';
 }
+
+// execution queue management
+let executionPanelCollapsed = false;
+let queueRefreshInterval = null;
+
+function toggleExecutionPanel() {
+    const panel = document.getElementById('execution-panel');
+    const content = document.getElementById('panel-content');
+    const toggle = document.querySelector('.panel-toggle');
+    
+    executionPanelCollapsed = !executionPanelCollapsed;
+    
+    if (executionPanelCollapsed) {
+        content.style.display = 'none';
+        toggle.textContent = '▶';
+        panel.classList.add('collapsed');
+    } else {
+        content.style.display = 'block';
+        toggle.textContent = '▼';
+        panel.classList.remove('collapsed');
+    }
+}
+
+async function refreshQueueStatus() {
+    try {
+        const response = await fetch('/api/queue/status/');
+        if (!response.ok) throw new Error('Failed to fetch queue status');
+        
+        const data = await response.json();
+        updateQueueDisplay(data);
+    } catch (error) {
+        console.error('Error fetching queue status:', error);
+    }
+}
+
+function updateQueueDisplay(data) {
+    // update counts
+    document.getElementById('active-count').textContent = data.running_count || 0;
+    document.getElementById('queued-count').textContent = data.queued_count || 0;
+    document.getElementById('completed-count').textContent = data.completed_count || 0;
+    
+    // update running list
+    const runningList = document.getElementById('running-list');
+    if (data.running && data.running.length > 0) {
+        runningList.innerHTML = data.running.map(item => createExecutionItem(item, 'running')).join('');
+    } else {
+        runningList.innerHTML = '<div class="empty-message">No running executions</div>';
+    }
+    
+    // update queued list
+    const queuedList = document.getElementById('queued-list');
+    if (data.queued && data.queued.length > 0) {
+        queuedList.innerHTML = data.queued.map((item, index) => 
+            createExecutionItem(item, 'queued', index + 1)
+        ).join('');
+    } else {
+        queuedList.innerHTML = '<div class="empty-message">No queued executions</div>';
+    }
+    
+    // update completed list
+    const completedList = document.getElementById('completed-list');
+    if (data.completed && data.completed.length > 0) {
+        completedList.innerHTML = data.completed.map(item => createExecutionItem(item, 'completed')).join('');
+    } else {
+        completedList.innerHTML = '<div class="empty-message">No recent completions</div>';
+    }
+}
+
+function createExecutionItem(item, type, position = null) {
+    const progressBar = type === 'running' ? `
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: ${item.progress_percent || 0}%"></div>
+        </div>
+    ` : '';
+    
+    const positionText = position ? `<span class="queue-position">Position: ${position}</span>` : '';
+    
+    const cancelButton = (type === 'queued') ? `
+        <button class="btn-cancel" onclick="cancelExecution(${item.id})">Cancel</button>
+    ` : '';
+    
+    const statusClass = {
+        'running': 'status-running',
+        'queued': 'status-queued',
+        'completed': 'status-completed',
+        'failed': 'status-failed',
+        'cancelled': 'status-cancelled'
+    }[item.status] || '';
+    
+    const timingInfo = type === 'running' && item.started_at ? 
+        `Started ${formatTimeAgo(item.started_at)}` :
+        type === 'completed' && item.completed_at ? 
+        `Completed ${formatTimeAgo(item.completed_at)}` :
+        type === 'queued' && item.created_at ?
+        `Queued ${formatTimeAgo(item.created_at)}` : '';
+    
+    return `
+        <div class="execution-item ${statusClass}">
+            <div class="execution-header">
+                <span class="service-name">${item.service_name}</span>
+                <span class="service-type">${item.service_type}</span>
+                ${cancelButton}
+            </div>
+            <div class="execution-details">
+                ${positionText}
+                <span class="timing-info">${timingInfo}</span>
+                ${item.operation ? `<span class="operation">${item.operation}</span>` : ''}
+            </div>
+            ${progressBar}
+        </div>
+    `;
+}
+
+async function cancelExecution(queueId) {
+    if (!confirm('Are you sure you want to cancel this execution?')) return;
+    
+    try {
+        const response = await fetch(`/api/queue/${queueId}/cancel/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Execution cancelled', 'success');
+            refreshQueueStatus();
+        } else {
+            showToast(result.message || 'Failed to cancel execution', 'error');
+        }
+    } catch (error) {
+        console.error('Error cancelling execution:', error);
+        showToast('Failed to cancel execution', 'error');
+    }
+}
+
+function formatTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
+// start queue refresh interval
+function startQueueRefresh() {
+    refreshQueueStatus();
+    queueRefreshInterval = setInterval(refreshQueueStatus, 5000); // refresh every 5 seconds
+}
+
+function stopQueueRefresh() {
+    if (queueRefreshInterval) {
+        clearInterval(queueRefreshInterval);
+        queueRefreshInterval = null;
+    }
+}
+
+// initialize queue panel on page load
+document.addEventListener('DOMContentLoaded', function() {
+    startQueueRefresh();
+});
+
+// cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopQueueRefresh();
+});
