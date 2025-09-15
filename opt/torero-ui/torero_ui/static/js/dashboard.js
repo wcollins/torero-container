@@ -324,21 +324,31 @@ async function syncServices() {
 async function showExecutionDetails(executionId) {
     const modal = document.getElementById('execution-modal');
     const content = document.getElementById('execution-detail-content');
-    
+
     try {
         content.innerHTML = '<div class="loading">Loading execution details...</div>';
         modal.classList.add('active');
-        
+
         const url = window.dashboardConfig.apiUrls.executionDetails.replace('{id}', executionId);
         const response = await fetch(url);
-        
+
         if (!response.ok) {
             throw new Error(`failed to load execution details: ${response.status}`);
         }
-        
+
         const execution = await response.json();
+
+        // parse execution_data if it's a json string
+        if (execution.execution_data && typeof execution.execution_data === 'string') {
+            try {
+                execution.execution_data = JSON.parse(execution.execution_data);
+            } catch (e) {
+                console.error('Failed to parse execution_data as JSON:', e);
+            }
+        }
+
         content.innerHTML = generateExecutionDetailHTML(execution);
-        
+
     } catch (error) {
         console.error('error loading execution details:', error);
         content.innerHTML = `<div class="text-error">Failed to load execution details: ${error.message}</div>`;
@@ -346,29 +356,42 @@ async function showExecutionDetails(executionId) {
 }
 
 function generateExecutionDetailHTML(execution) {
-    const startTime = new Date(execution.started_at);
+    // handle raw execution data without wrapper fields
+    if (!execution.service_name && !execution.status && execution.stdout !== undefined) {
+        return formatOpenTofuOutput(execution);
+    }
+
+    const startTime = execution.started_at ? new Date(execution.started_at) : null;
     const completedTime = execution.completed_at ? new Date(execution.completed_at) : null;
-    
+
     let html = `
         <h2 class="text-info mb-20">Execution Details</h2>
-        
+
         <div class="execution-info">
+            ${execution.service_name ? `
             <div class="info-row">
                 <span class="status-label">Service:</span>
                 <span class="status-value">${execution.service_name}</span>
             </div>
+            ` : ''}
+            ${execution.service_type ? `
             <div class="info-row">
                 <span class="status-label">Type:</span>
                 <span class="status-value">${execution.service_type}</span>
             </div>
+            ` : ''}
+            ${execution.status ? `
             <div class="info-row">
                 <span class="status-label">Status:</span>
                 <span class="status-${execution.status}">${execution.status.toUpperCase()}</span>
             </div>
+            ` : ''}
+            ${startTime ? `
             <div class="info-row">
                 <span class="status-label">Started:</span>
                 <span class="status-value">${startTime.toLocaleString()}</span>
             </div>
+            ` : ''}
     `;
     
     if (completedTime) {
@@ -379,8 +402,8 @@ function generateExecutionDetailHTML(execution) {
             </div>
         `;
     }
-    
-    if (execution.duration_seconds !== null) {
+
+    if (execution.duration_seconds !== null && execution.duration_seconds !== undefined) {
         html += `
             <div class="info-row">
                 <span class="status-label">Duration:</span>
@@ -388,8 +411,8 @@ function generateExecutionDetailHTML(execution) {
             </div>
         `;
     }
-    
-    if (execution.return_code !== null) {
+
+    if (execution.return_code !== null && execution.return_code !== undefined) {
         html += `
             <div class="info-row">
                 <span class="status-label">Return Code:</span>
@@ -397,46 +420,74 @@ function generateExecutionDetailHTML(execution) {
             </div>
         `;
     }
-    
+
     html += '</div>';
     
     // check service type and use appropriate formatter
-    if (execution.service_type === 'opentofu-plan' && execution.execution_data && 
-        typeof execution.execution_data === 'object' && 
-        (execution.execution_data.stdout || execution.execution_data.state_file)) {
-        // use specialized opentofu formatter
-        html += formatOpenTofuOutput(execution.execution_data);
-    } else if (execution.service_type === 'python-script' && execution.execution_data && 
-               typeof execution.execution_data === 'object') {
-        // use specialized python formatter
-        html += formatPythonOutput(execution.execution_data);
-    } else if (execution.service_type === 'ansible-playbook' && execution.execution_data && 
-               typeof execution.execution_data === 'object') {
-        // use specialized ansible formatter
-        html += formatAnsibleOutput(execution.execution_data);
+    let executionData = execution.execution_data;
+
+    // handle nested json in execution_data.stdout
+    if (executionData && executionData.stdout && typeof executionData.stdout === 'string') {
+        const trimmedStdout = executionData.stdout.trim();
+        if (trimmedStdout.startsWith('{') || trimmedStdout.startsWith('[')) {
+            try {
+                const parsedStdout = JSON.parse(executionData.stdout);
+                executionData = parsedStdout;
+            } catch (e) {
+                // keep original if parse fails
+            }
+        }
+    }
+
+    // determine if we should use a specialized formatter
+    let useSpecializedFormatter = false;
+
+    if (executionData && typeof executionData === 'object') {
+        // check if execution_data contains stdout/stderr
+        if (executionData.stdout !== undefined || executionData.stderr !== undefined) {
+            useSpecializedFormatter = true;
+
+            // auto-detect opentofu if not already set
+            if (!execution.service_type && executionData.state_file !== undefined) {
+                execution.service_type = 'opentofu-plan';
+            }
+        }
+    }
+
+    // use the appropriate formatter based on service type
+    if (useSpecializedFormatter) {
+        if (execution.service_type === 'opentofu-plan' || execution.service_type === 'opentofu-apply') {
+            html += formatOpenTofuOutput(executionData);
+        } else if (execution.service_type === 'python-script') {
+            html += formatPythonOutput(executionData);
+        } else if (execution.service_type === 'ansible-playbook') {
+            html += formatAnsibleOutput(executionData);
+        } else {
+            // generic formatter for execution data with stdout/stderr
+            html += formatOpenTofuOutput(executionData);
+        }
     } else {
-        // use standard output display for other service types
-        // add stdout if available
+        // fall back to displaying raw stdout/stderr from the execution object
         if (execution.stdout) {
             html += `
                 <h3 class="text-info mt-20 mb-10">Standard Output</h3>
                 <div class="execution-output">${escapeHtml(execution.stdout)}</div>
             `;
         }
-        
-        // add stderr if available
+
         if (execution.stderr) {
             html += `
                 <h3 class="text-error mt-20 mb-10">Standard Error</h3>
                 <div class="execution-output">${escapeHtml(execution.stderr)}</div>
             `;
         }
-        
-        // add execution data if available
-        if (execution.execution_data && Object.keys(execution.execution_data).length > 0) {
+
+        // only show raw execution_data if it doesn't contain stdout/stderr
+        if (executionData && Object.keys(executionData).length > 0 &&
+            executionData.stdout === undefined && executionData.stderr === undefined) {
             html += `
                 <h3 class="text-info mt-20 mb-10">Execution Data</h3>
-                <div class="execution-output">${escapeHtml(JSON.stringify(execution.execution_data, null, 2))}</div>
+                <div class="execution-output">${escapeHtml(JSON.stringify(executionData, null, 2))}</div>
             `;
         }
     }
@@ -502,26 +553,48 @@ function escapeHtml(text) {
 function formatOpenTofuOutput(executionData) {
     // parse the data if it's a string
     const data = typeof executionData === 'string' ? JSON.parse(executionData) : executionData;
-    
+
     return `
         <div class="opentofu-output mt-20">
-            <h3 class="text-info mb-10">Console Output</h3>
+            <h3 class="text-info mb-10">Execution Output</h3>
             <div class="opentofu-console">
                 ${formatConsoleOutput(data)}
             </div>
         </div>`;
 }
 
-// format console output with ansi to html conversion using dracula theme
+// format console output with ansi to html conversion
 function formatConsoleOutput(data) {
-    if (!data.stdout && !data.stderr) {
+    // handle data that might be a json string
+    let parsedData = data;
+    if (typeof data === 'string') {
+        try {
+            parsedData = JSON.parse(data);
+        } catch (e) {
+            // if it's not json, treat it as stdout directly
+            parsedData = { stdout: data };
+        }
+    }
+
+    if (!parsedData.stdout && !parsedData.stderr) {
         return '<div class="no-output">No console output available</div>';
     }
-    
+
     let html = '';
-    
-    if (data.stdout) {
-        const formattedStdout = convertAnsiToHtml(data.stdout);
+
+    // add timing information if available
+    if (parsedData.start_time || parsedData.end_time || parsedData.elapsed_time) {
+        html += formatTimingInfo(parsedData);
+    }
+
+    if (parsedData.stdout) {
+        // ensure we have actual string data
+        let stdoutText = parsedData.stdout;
+        if (typeof stdoutText !== 'string') {
+            stdoutText = String(stdoutText);
+        }
+
+        const formattedStdout = convertAnsiToHtml(stdoutText);
         html += `
             <div class="console-section">
                 <h4 class="console-header">Standard Output</h4>
@@ -529,9 +602,14 @@ function formatConsoleOutput(data) {
             </div>
         `;
     }
-    
-    if (data.stderr) {
-        const formattedStderr = convertAnsiToHtml(data.stderr);
+
+    if (parsedData.stderr) {
+        let stderrText = parsedData.stderr;
+        if (typeof stderrText !== 'string') {
+            stderrText = String(stderrText);
+        }
+
+        const formattedStderr = convertAnsiToHtml(stderrText);
         html += `
             <div class="console-section">
                 <h4 class="console-header console-header-error">Standard Error</h4>
@@ -539,14 +617,19 @@ function formatConsoleOutput(data) {
             </div>
         `;
     }
-    
+
+    // add state file information if available
+    if (parsedData.state_file) {
+        html += formatStateFile(parsedData.state_file);
+    }
+
     return html;
 }
 
 // convert ansi escape codes to html with gruvbox theme colors
 function convertAnsiToHtml(text) {
     if (!text) return '';
-    
+
     // gruvbox dark theme colors
     const gruvbox = {
         black: '#282828',
@@ -566,10 +649,10 @@ function convertAnsiToHtml(text) {
         brightCyan: '#8ec07c',
         brightWhite: '#ebdbb2'
     };
-    
+
     // first escape html to prevent xss
     let result = escapeHtml(text);
-    
+
     // replace ansi color codes with html spans
     // handle 8-color and 16-color ansi codes
     result = result
@@ -760,35 +843,45 @@ function formatOutputValue(value) {
 // format timing information
 function formatTimingInfo(data) {
     if (!data.start_time && !data.end_time && !data.elapsed_time) {
-        return '<div class="no-output">No timing information available</div>';
+        return '';
     }
-    
+
     const startTime = data.start_time ? new Date(data.start_time) : null;
     const endTime = data.end_time ? new Date(data.end_time) : null;
-    
+
+    // format the elapsed time properly
+    let elapsedTimeStr = '';
+    if (data.elapsed_time !== null && data.elapsed_time !== undefined) {
+        if (typeof data.elapsed_time === 'number') {
+            elapsedTimeStr = `${data.elapsed_time.toFixed(3)}s`;
+        } else {
+            elapsedTimeStr = String(data.elapsed_time);
+        }
+    }
+
     return `
         <div class="timing-container">
-            <h4 class="timing-header">Execution Timing</h4>
+            <h4 class="timing-header">Execution Details</h4>
             <div class="timing-grid">
                 ${startTime ? `
                     <div class="timing-item">
-                        <span class="timing-label">Started:</span>
-                        <span class="timing-value">${startTime.toLocaleString()}</span>
+                        <span class="timing-label">Start Time:</span>
+                        <span class="timing-value">${startTime.toISOString()}</span>
                     </div>
                 ` : ''}
                 ${endTime ? `
                     <div class="timing-item">
-                        <span class="timing-label">Completed:</span>
-                        <span class="timing-value">${endTime.toLocaleString()}</span>
+                        <span class="timing-label">End Time:</span>
+                        <span class="timing-value">${endTime.toISOString()}</span>
                     </div>
                 ` : ''}
-                ${data.elapsed_time ? `
+                ${elapsedTimeStr ? `
                     <div class="timing-item">
-                        <span class="timing-label">Duration:</span>
-                        <span class="timing-value">${data.elapsed_time.toFixed(3)} seconds</span>
+                        <span class="timing-label">Elapsed Time:</span>
+                        <span class="timing-value">${elapsedTimeStr}</span>
                     </div>
                 ` : ''}
-                ${data.return_code !== undefined ? `
+                ${data.return_code !== undefined && data.return_code !== null ? `
                     <div class="timing-item">
                         <span class="timing-label">Return Code:</span>
                         <span class="timing-value ${data.return_code === 0 ? 'timing-success' : 'timing-error'}">${data.return_code}</span>
