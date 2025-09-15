@@ -37,6 +37,6 @@
     </div>
     
     {% block extra_js %}{% endblock %}
-    <script src="{% static 'js/dashboard.js' %}"></script>
+    <script src="{% static 'js/dashboard.js' %}?v={% now 'U' %}"></script>
 </body>
 </html>
