@@ -676,7 +676,8 @@ body {
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
-    white-space: pre;
+    white-space: pre-wrap;
+    word-wrap: break-word;
     border: 1px solid #3c3836;
     max-height: 600px;
     overflow-y: auto;
