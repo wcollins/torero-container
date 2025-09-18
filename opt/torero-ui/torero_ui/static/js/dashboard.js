@@ -179,35 +179,12 @@ function updateServiceStatus(services) {
                 <span class="status-label">Success Rate:</span>
                 <span class="status-success">${service.success_rate.toFixed(1)}%</span>
             </div>
-            <div class="service-actions">
-                ${service.service_type === 'opentofu-plan' ? `
-                    <div class="execute-dropdown">
-                        <button class="execute-btn dropdown-toggle" onclick="toggleExecuteDropdown(this)">
-                            <span class="btn-text">Execute</span>
-                            <span class="btn-spinner" style="display: none;">
-                                <span class="spinner"></span> Executing...
-                            </span>
-                            <span class="dropdown-arrow">▼</span>
-                        </button>
-                        <div class="dropdown-menu">
-                            <button class="dropdown-item" onclick="executeOpenTofu('${service.name}', 'apply', this)">
-                                Apply
-                            </button>
-                            <button class="dropdown-item destroy-option" onclick="executeOpenTofu('${service.name}', 'destroy', this)">
-                                Destroy
-                            </button>
-                        </div>
-                    </div>
-                ` : `
-                    <button class="execute-btn" onclick="executeService('${service.name}', this)">
-                        <span class="btn-text">Execute</span>
-                        <span class="btn-spinner" style="display: none;">
-                            <span class="spinner"></span> Executing...
-                        </span>
-                    </button>
-                `}
-                <button class="history-btn" onclick="showServiceHistory('${service.name}')">
-                    History
+            <div class="execute-container">
+                <button class="execute-btn execute-icon-btn" onclick="showInputForm('${service.name}', '${service.type || service.service_type}')" title="Execute Service">
+                    <img src="/static/img/execute.svg" alt="Execute" class="execute-icon">
+                    <span class="btn-spinner" style="display: none;">
+                        <span class="spinner"></span>
+                    </span>
                 </button>
             </div>
         `;
@@ -1747,77 +1724,19 @@ function toggleExecuteDropdown(button) {
 }
 
 // close dropdowns when clicking outside
-document.addEventListener('click', function(event) {
-    if (!event.target.closest('.execute-dropdown')) {
-        document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
-            menu.classList.remove('show');
-            menu.previousElementSibling.classList.remove('open');
-        });
-    }
-});
+// removed dropdown click handler - no longer needed after removing opentofu dropdown
 
-// execute opentofu service with specific operation
-async function executeOpenTofu(serviceName, operation, button) {
-    // close the dropdown
-    const dropdown = button.closest('.dropdown-menu');
-    const toggleButton = dropdown.previousElementSibling;
-    dropdown.classList.remove('show');
-    toggleButton.classList.remove('open');
-    
-    // update toggle button state to executing
-    const btnText = toggleButton.querySelector('.btn-text');
-    const btnSpinner = toggleButton.querySelector('.btn-spinner');
-    const btnArrow = toggleButton.querySelector('.dropdown-arrow');
-    
-    btnText.style.display = 'none';
-    btnArrow.style.display = 'none';
-    btnSpinner.style.display = 'inline-flex';
-    toggleButton.disabled = true;
-    
-    try {
-        const response = await fetch(`/api/execute/${serviceName}/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCsrfToken(),
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                operation: operation
-            }),
-        });
-        
-        const result = await response.json();
-        
-        if (result.status === 'queued' || result.status === 'started') {
-            // show success feedback on the card
-            const message = result.status === 'queued' ? 
-                `${operation} queued (position ${result.position || 1})` : 
-                `${operation} started`;
-            showExecutionFeedback(toggleButton, 'success', message);
-            
-            // refresh dashboard and queue after short delay
-            setTimeout(() => {
-                refreshDashboard();
-                refreshQueueStatus();
-            }, 1000);
-            
-        } else {
-            showExecutionFeedback(toggleButton, 'error', result.message);
-        }
-        
-    } catch (error) {
-        console.error('execution error:', error);
-        showExecutionFeedback(toggleButton, 'error', 'network error');
-    }
-}
+// removed executeOpenTofu function - opentofu now uses standard input form with operation selection
 
 // execute service functionality
 async function executeService(serviceName, button) {
     // update button state to executing
     const btnText = button.querySelector('.btn-text');
+    const btnIcon = button.querySelector('.execute-icon');
     const btnSpinner = button.querySelector('.btn-spinner');
-    
-    btnText.style.display = 'none';
+
+    if (btnText) btnText.style.display = 'none';
+    if (btnIcon) btnIcon.style.display = 'none';
     btnSpinner.style.display = 'inline-flex';
     button.disabled = true;
     
@@ -1877,10 +1796,16 @@ function showExecutionFeedback(button, type, message) {
 // reset execute button to default state
 function resetExecuteButton(button) {
     const btnText = button.querySelector('.btn-text');
+    const btnIcon = button.querySelector('.execute-icon');
     const btnSpinner = button.querySelector('.btn-spinner');
     const btnArrow = button.querySelector('.dropdown-arrow');
-    
-    btnText.style.display = 'inline';
+
+    if (btnText) {
+        btnText.style.display = 'inline';
+    }
+    if (btnIcon) {
+        btnIcon.style.display = 'block';
+    }
     btnSpinner.style.display = 'none';
     if (btnArrow) {
         btnArrow.style.display = 'inline';
@@ -2111,3 +2036,854 @@ document.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('beforeunload', function() {
     stopQueueRefresh();
 });
+
+
+// service input form functionality
+class ServiceInputForm {
+    constructor() {
+        this.currentService = null;
+        this.currentManifest = null;
+    }
+
+    async loadServiceInputs(serviceName) {
+        try {
+            const response = await fetch(`/api/services/${serviceName}/inputs/`);
+            if (!response.ok) {
+                if (response.status === 404) {
+                    // no manifest found, use default form
+                    return null;
+                }
+                throw new Error('Failed to load service inputs');
+            }
+
+            const data = await response.json();
+            this.currentService = serviceName;
+            this.currentManifest = data.manifest;
+            return data;
+        } catch (error) {
+            console.error('Error loading service inputs:', error);
+            return null;
+        }
+    }
+
+    async loadAvailableInputFiles(serviceName) {
+        try {
+            const response = await fetch(`/api/services/${serviceName}/input-files/`);
+            if (!response.ok) {
+                console.warn('Could not load available input files');
+                return [];
+            }
+
+            const data = await response.json();
+            return data.files || [];
+        } catch (error) {
+            console.error('Error loading available input files:', error);
+            return [];
+        }
+    }
+
+    async generateForm(serviceName, serviceType, operation = null) {
+        // load input manifest
+        const inputData = await this.loadServiceInputs(serviceName);
+
+        if (!inputData || !inputData.manifest) {
+            return this.generateBasicForm(serviceName, serviceType, operation);
+        }
+
+        const manifest = inputData.manifest;
+        const form = document.createElement('form');
+        form.className = 'service-input-form';
+        form.id = 'service-input-form';
+
+        // load available input files
+        const availableFiles = await this.loadAvailableInputFiles(serviceName);
+
+        // add service info and file loader
+        form.innerHTML = `
+            <div class="form-header">
+                <h3>Execute Service: ${serviceName}</h3>
+                <p class="service-type">Type: ${serviceType}</p>
+            </div>
+
+            ${serviceType === 'opentofu-plan' ? `
+                <div class="form-section opentofu-operation-section">
+                    <div class="operation-selector">
+                        <label class="operation-option ${!operation || operation === 'apply' ? 'selected' : ''}">
+                            <input type="radio" name="operation" value="apply" ${!operation || operation === 'apply' ? 'checked' : ''}>
+                            <span class="operation-text">
+                                <strong>APPLY</strong>
+                                <small>Provision Infrastructure</small>
+                            </span>
+                        </label>
+                        <label class="operation-option ${operation === 'destroy' ? 'selected' : ''}">
+                            <input type="radio" name="operation" value="destroy" ${operation === 'destroy' ? 'checked' : ''}>
+                            <span class="operation-text">
+                                <strong>DESTROY</strong>
+                                <small>Deprovision Infrastructure</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            ` : ''}
+
+            <div class="input-file-loader">
+                <div class="loader-header">
+                    <h4>Load from Input File (Optional)</h4>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleInputFileLoader()">
+                        ▼ Show/Hide
+                    </button>
+                </div>
+                <div id="input-file-section" class="input-file-section" style="display: none;">
+                    <div class="form-field">
+                        <label for="input-file-path">Input File Path</label>
+                        <input type="text" id="input-file-path" class="form-control"
+                               placeholder="@inputs/vpc.yaml or /absolute/path/config.yaml">
+                        <small class="help-text">Use @ prefix for paths relative to /home/admin/data</small>
+                    </div>
+                    ${availableFiles && availableFiles.length > 0 ? `
+                        <div class="form-field">
+                            <label>Or Select Available File:</label>
+                            <select id="preset-selector" class="form-control" onchange="selectPresetFile(this.value)">
+                                <option value="">-- Select an input file --</option>
+                                ${availableFiles.map(file => `
+                                    <option value="${file.path}">
+                                        ${file.filename}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    ` : '<p class="no-files-message">No pre-configured input files found for this service</p>'}
+                    <button type="button" class="btn btn-info" onclick="loadInputFile('${serviceName}')">
+                        Load File
+                    </button>
+                    <hr>
+                </div>
+            </div>
+        `;
+
+        // generate variable fields
+        if (manifest.inputs && manifest.inputs.variables) {
+            const variablesSection = document.createElement('div');
+            variablesSection.className = 'form-section';
+            variablesSection.innerHTML = '<h4>Variables</h4>';
+
+            manifest.inputs.variables.forEach(input => {
+                const field = this.createFormField(input);
+                variablesSection.appendChild(field);
+            });
+
+            form.appendChild(variablesSection);
+        }
+
+        // generate secret fields
+        if (manifest.inputs && manifest.inputs.secrets && manifest.inputs.secrets.length > 0) {
+            const secretsSection = document.createElement('div');
+            secretsSection.className = 'form-section';
+            secretsSection.innerHTML = '<h4>Secrets</h4>';
+
+            const secretsField = this.createSecretsField(manifest.inputs.secrets);
+            secretsSection.appendChild(secretsField);
+
+            form.appendChild(secretsSection);
+        }
+
+        // generate file fields
+        if (manifest.inputs && manifest.inputs.files && manifest.inputs.files.length > 0) {
+            const filesSection = document.createElement('div');
+            filesSection.className = 'form-section';
+            filesSection.innerHTML = '<h4>Files</h4>';
+
+            const filesField = this.createFilesField(manifest.inputs.files);
+            filesSection.appendChild(filesField);
+
+            form.appendChild(filesSection);
+        }
+
+        // operation selector for opentofu moved to top of form
+
+        // add action buttons
+        form.innerHTML += `
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Execute</button>
+                <button type="button" class="btn btn-secondary" onclick="closeInputForm()">Cancel</button>
+                <button type="button" class="btn btn-info" onclick="validateInputs('${serviceName}')">Validate</button>
+            </div>
+        `;
+
+        return form;
+    }
+
+    async generateBasicForm(serviceName, serviceType, operation = null) {
+        const form = document.createElement('form');
+        form.className = 'service-input-form basic-form';
+        form.id = 'service-input-form';
+
+        // load available input files even for basic form
+        const availableFiles = await this.loadAvailableInputFiles(serviceName);
+
+        form.innerHTML = `
+            <div class="form-header">
+                <h3>Execute Service: ${serviceName}</h3>
+                <p class="service-type">Type: ${serviceType}</p>
+                <p class="form-note">No input manifest found. Using basic form.</p>
+            </div>
+
+            ${serviceType === 'opentofu-plan' ? `
+                <div class="form-section opentofu-operation-section">
+                    <div class="operation-selector">
+                        <label class="operation-option ${!operation || operation === 'apply' ? 'selected' : ''}">
+                            <input type="radio" name="operation" value="apply" ${!operation || operation === 'apply' ? 'checked' : ''}>
+                            <span class="operation-text">
+                                <strong>APPLY</strong>
+                                <small>Provision Infrastructure</small>
+                            </span>
+                        </label>
+                        <label class="operation-option ${operation === 'destroy' ? 'selected' : ''}">
+                            <input type="radio" name="operation" value="destroy" ${operation === 'destroy' ? 'checked' : ''}>
+                            <span class="operation-text">
+                                <strong>DESTROY</strong>
+                                <small>Deprovision Infrastructure</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            ` : ''}
+
+            <div class="input-file-loader">
+                <div class="loader-header">
+                    <h4>Load from Input File (Optional)</h4>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleInputFileLoader()">
+                        ▼ Show/Hide
+                    </button>
+                </div>
+                <div id="input-file-section" class="input-file-section" style="display: none;">
+                    <div class="form-field">
+                        <label for="input-file-path">Input File Path</label>
+                        <input type="text" id="input-file-path" class="form-control"
+                               placeholder="@inputs/vpc.yaml or /absolute/path/config.yaml">
+                        <small class="help-text">Use @ prefix for paths relative to /home/admin/data</small>
+                    </div>
+                    ${availableFiles && availableFiles.length > 0 ? `
+                        <div class="form-field">
+                            <label>Or Select Available File:</label>
+                            <select id="preset-selector" class="form-control" onchange="selectPresetFile(this.value)">
+                                <option value="">-- Select an input file --</option>
+                                ${availableFiles.map(file => `
+                                    <option value="${file.path}">
+                                        ${file.filename}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    ` : '<p class="no-files-message">No pre-configured input files found for this service</p>'}
+                    <button type="button" class="btn btn-info" onclick="loadInputFile('${serviceName}')">
+                        Load File
+                    </button>
+                    <hr>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h4>Parameters</h4>
+                <div class="form-field">
+                    <label for="basic-params">Parameters (JSON format)</label>
+                    <textarea id="basic-params" name="parameters" rows="4"
+                              placeholder='{"key": "value"}'></textarea>
+                </div>
+            </div>
+
+            <!-- operation selector for opentofu moved to top of form -->
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Execute</button>
+                <button type="button" class="btn btn-secondary" onclick="closeInputForm()">Cancel</button>
+            </div>
+        `;
+
+        return form;
+    }
+
+    createFormField(input) {
+        const container = document.createElement('div');
+        container.className = 'form-field';
+
+        const label = document.createElement('label');
+        label.textContent = input.description || input.name;
+        if (input.required) {
+            label.classList.add('required');
+            label.innerHTML += ' <span class="required-mark">*</span>';
+        }
+        label.setAttribute('for', `input-${input.name}`);
+
+        let field;
+        switch (input.type) {
+            case 'string':
+                if (input.validation && input.validation.enum) {
+                    field = this.createSelectField(input);
+                } else {
+                    field = this.createTextField(input);
+                }
+                break;
+            case 'integer':
+            case 'number':
+                field = this.createNumberField(input);
+                break;
+            case 'boolean':
+                field = this.createCheckboxField(input);
+                break;
+            case 'file':
+                field = this.createFileField(input);
+                break;
+            case 'array':
+            case 'object':
+                field = this.createJsonField(input);
+                break;
+            default:
+                field = this.createTextField(input);
+        }
+
+        container.appendChild(label);
+        container.appendChild(field);
+
+        // add help text if available
+        if (input.description && input.description !== input.name) {
+            const helpText = document.createElement('small');
+            helpText.className = 'help-text';
+            helpText.textContent = input.description;
+            container.appendChild(helpText);
+        }
+
+        return container;
+    }
+
+    createTextField(input) {
+        const field = document.createElement('input');
+        field.type = 'text';
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-control';
+
+        if (input.default !== undefined) {
+            field.value = input.default;
+        }
+
+        if (input.required) {
+            field.required = true;
+        }
+
+        if (input.validation) {
+            if (input.validation.min_length) {
+                field.minLength = input.validation.min_length;
+            }
+            if (input.validation.max_length) {
+                field.maxLength = input.validation.max_length;
+            }
+        }
+
+        return field;
+    }
+
+    createSelectField(input) {
+        const field = document.createElement('select');
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-control';
+
+        if (input.required) {
+            field.required = true;
+        }
+
+        // add options
+        if (input.validation && input.validation.enum) {
+            input.validation.enum.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                if (input.default === value) {
+                    option.selected = true;
+                }
+                field.appendChild(option);
+            });
+        }
+
+        return field;
+    }
+
+    createNumberField(input) {
+        const field = document.createElement('input');
+        field.type = 'number';
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-control';
+
+        if (input.default !== undefined) {
+            field.value = input.default;
+        }
+
+        if (input.required) {
+            field.required = true;
+        }
+
+        if (input.validation) {
+            if (input.validation.min !== undefined) {
+                field.min = input.validation.min;
+            }
+            if (input.validation.max !== undefined) {
+                field.max = input.validation.max;
+            }
+        }
+
+        return field;
+    }
+
+    createCheckboxField(input) {
+        const container = document.createElement('div');
+        container.className = 'checkbox-container';
+
+        const field = document.createElement('input');
+        field.type = 'checkbox';
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-check';
+
+        if (input.default === true) {
+            field.checked = true;
+        }
+
+        container.appendChild(field);
+        return container;
+    }
+
+    createFileField(input) {
+        const field = document.createElement('input');
+        field.type = 'text';
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-control';
+        field.placeholder = input.path || 'Enter file path or use @notation';
+
+        if (input.default !== undefined) {
+            field.value = input.default;
+        }
+
+        if (input.required) {
+            field.required = true;
+        }
+
+        return field;
+    }
+
+    createJsonField(input) {
+        const field = document.createElement('textarea');
+        field.id = `input-${input.name}`;
+        field.name = input.name;
+        field.className = 'form-control json-field';
+        field.rows = 3;
+        field.setAttribute('data-type', input.type);
+
+        // Set placeholder based on type
+        if (input.type === 'array') {
+            field.placeholder = input.placeholder || '["value1", "value2", ...]';
+        } else {
+            field.placeholder = input.placeholder || '{"key": "value", ...}';
+        }
+
+        // Set default value - stringify if it's an object/array
+        if (input.default !== undefined) {
+            if (typeof input.default === 'object') {
+                field.value = JSON.stringify(input.default, null, 2);
+            } else {
+                field.value = input.default;
+            }
+        }
+
+        if (input.required) {
+            field.required = true;
+        }
+
+        return field;
+    }
+
+    createSecretsField(secrets) {
+        const container = document.createElement('div');
+        container.className = 'secrets-container';
+
+        secrets.forEach(secret => {
+            const secretDiv = document.createElement('div');
+            secretDiv.className = 'secret-item';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `secret-${secret.name}`;
+            checkbox.name = 'secrets';
+            checkbox.value = secret.name;
+
+            if (secret.required) {
+                checkbox.checked = true;
+                checkbox.disabled = true;
+            }
+
+            const label = document.createElement('label');
+            label.setAttribute('for', `secret-${secret.name}`);
+            label.textContent = secret.description || secret.name;
+
+            secretDiv.appendChild(checkbox);
+            secretDiv.appendChild(label);
+            container.appendChild(secretDiv);
+        });
+
+        return container;
+    }
+
+    createFilesField(files) {
+        const container = document.createElement('div');
+        container.className = 'files-container';
+
+        files.forEach(file => {
+            const fileDiv = document.createElement('div');
+            fileDiv.className = 'file-item form-field';
+
+            const label = document.createElement('label');
+            label.textContent = file.description || file.name;
+            label.setAttribute('for', `file-${file.name}`);
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = `file-${file.name}`;
+            input.name = `file-${file.name}`;
+            input.className = 'form-control';
+            input.placeholder = file.path || 'Enter file path';
+
+            if (file.default) {
+                input.value = file.default;
+            }
+
+            fileDiv.appendChild(label);
+            fileDiv.appendChild(input);
+            container.appendChild(fileDiv);
+        });
+
+        return container;
+    }
+
+    async submitForm(formData) {
+        const serviceName = this.currentService;
+        const inputs = this.extractFormInputs(formData);
+
+        // Check if there's an input file path specified
+        const inputFilePath = document.getElementById('input-file-path')?.value;
+
+        try {
+            const requestBody = {
+                operation: formData.get('operation')
+            };
+
+            // If input file is specified, use it; otherwise use form inputs
+            if (inputFilePath) {
+                requestBody.input_file = inputFilePath;
+                // Still include form inputs as overrides
+                if (Object.keys(inputs.variables).length > 0 ||
+                    inputs.secrets.length > 0 ||
+                    Object.keys(inputs.files).length > 0) {
+                    requestBody.inputs = inputs;
+                }
+            } else {
+                requestBody.inputs = inputs;
+            }
+
+            const response = await fetch(`/api/execute/${serviceName}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast('Service execution started', 'success');
+                closeInputForm();
+                refreshDashboard();
+                refreshQueueStatus();
+            } else {
+                showToast(result.message || 'Execution failed', 'error');
+            }
+        } catch (error) {
+            console.error('Error submitting form:', error);
+            showToast('Failed to execute service', 'error');
+        }
+    }
+
+    extractFormInputs(formData) {
+        const inputs = {
+            variables: {},
+            secrets: [],
+            files: {}
+        };
+
+        // extract variables
+        for (const [key, value] of formData.entries()) {
+            if (!key.startsWith('secret-') && !key.startsWith('file-') &&
+                key !== 'operation' && key !== 'parameters') {
+
+                // Get the field element to check its data-type
+                const field = document.getElementById(`input-${key}`);
+                const isJsonField = field && (field.getAttribute('data-type') === 'array' ||
+                                             field.getAttribute('data-type') === 'object');
+
+                if (isJsonField && value) {
+                    // Parse JSON fields
+                    try {
+                        inputs.variables[key] = JSON.parse(value);
+                    } catch (e) {
+                        console.error(`Failed to parse JSON for ${key}:`, e);
+                        // If parsing fails, keep it as string
+                        inputs.variables[key] = value;
+                    }
+                } else if (field && field.type === 'checkbox') {
+                    // Handle checkbox as boolean
+                    inputs.variables[key] = field.checked;
+                } else if (value === '') {
+                    // Empty string stays empty (not false)
+                    // Skip empty non-required fields
+                    if (field && !field.required) {
+                        continue;
+                    }
+                    inputs.variables[key] = value;
+                } else {
+                    // Regular string value
+                    inputs.variables[key] = value;
+                }
+            }
+        }
+
+        // extract secrets
+        const secretCheckboxes = document.querySelectorAll('input[name="secrets"]:checked');
+        secretCheckboxes.forEach(checkbox => {
+            inputs.secrets.push(checkbox.value);
+        });
+
+        // extract files
+        formData.forEach((value, key) => {
+            if (key.startsWith('file-') && value) {
+                const fileName = key.replace('file-', '');
+                inputs.files[fileName] = value;
+            }
+        });
+
+        // handle basic form with raw parameters
+        if (formData.has('parameters')) {
+            try {
+                const params = JSON.parse(formData.get('parameters'));
+                inputs.variables = params;
+            } catch (e) {
+                console.error('Invalid JSON in parameters:', e);
+            }
+        }
+
+        return inputs;
+    }
+}
+
+// global instance
+const serviceInputForm = new ServiceInputForm();
+
+// wrapper function for OpenTofu with operation
+// show input form modal
+async function showInputForm(serviceName, serviceType, operation = null) {
+    const modal = document.getElementById('input-form-modal');
+    if (!modal) {
+        // create modal if it doesn't exist
+        const modalHtml = `
+            <div id="input-form-modal" class="modal">
+                <div class="modal-content input-form-content">
+                    <span class="close" onclick="closeInputForm()">&times;</span>
+                    <div id="input-form-container"></div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    const container = document.getElementById('input-form-container');
+    const form = await serviceInputForm.generateForm(serviceName, serviceType, operation);
+
+    container.innerHTML = '';
+    container.appendChild(form);
+
+    // attach submit handler
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        await serviceInputForm.submitForm(formData);
+    });
+
+    document.getElementById('input-form-modal').style.display = 'block';
+}
+
+// close input form modal
+function closeInputForm() {
+    const modal = document.getElementById('input-form-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// handle OpenTofu operation selection
+document.addEventListener('change', function(event) {
+    if (event.target.type === 'radio' && event.target.name === 'operation') {
+        const operationOptions = document.querySelectorAll('.operation-option');
+        operationOptions.forEach(option => {
+            const radio = option.querySelector('input[type="radio"]');
+            if (radio && radio.checked) {
+                option.classList.add('selected');
+            } else {
+                option.classList.remove('selected');
+            }
+        });
+    }
+});
+
+// validate inputs
+async function validateInputs(serviceName) {
+    const form = document.getElementById('service-input-form');
+    if (!form) return;
+
+    const formData = new FormData(form);
+    const inputs = serviceInputForm.extractFormInputs(formData);
+
+    try {
+        const response = await fetch(`/api/services/${serviceName}/validate/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(inputs)
+        });
+
+        const result = await response.json();
+
+        if (result.valid) {
+            showToast('Inputs are valid', 'success');
+        } else {
+            const errorMsg = 'Validation errors:\n' + result.errors.join('\n');
+            alert(errorMsg);
+        }
+    } catch (error) {
+        console.error('Error validating inputs:', error);
+        showToast('Failed to validate inputs', 'error');
+    }
+}
+
+// enhanced execute service with input form
+async function executeServiceWithInputs(serviceName, serviceType, button) {
+    // show input form instead of direct execution
+    showInputForm(serviceName, serviceType);
+}
+
+// toggle input file loader section
+function toggleInputFileLoader() {
+    const section = document.getElementById('input-file-section');
+    if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+// select preset file
+function selectPresetFile(filePath) {
+    if (filePath) {
+        document.getElementById('input-file-path').value = filePath;
+    }
+}
+
+// load input file and populate form
+async function loadInputFile(serviceName) {
+    const filePath = document.getElementById('input-file-path').value;
+    if (!filePath) {
+        showToast('Please enter a file path', 'warning');
+        return;
+    }
+
+    try {
+        // Call API to load the input file
+        const response = await fetch('/api/load-input-file/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_path: filePath,
+                service_name: serviceName
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to load input file');
+        }
+
+        const data = await response.json();
+
+        if (data.status === 'success' && data.inputs) {
+            // Populate form fields with loaded data
+            populateFormFromInputs(data.inputs);
+            showToast('Input file loaded successfully', 'success');
+
+            // Hide the loader section after successful load
+            document.getElementById('input-file-section').style.display = 'none';
+        } else {
+            showToast(data.message || 'Failed to load input file', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading input file:', error);
+        showToast('Failed to load input file', 'error');
+    }
+}
+
+// populate form fields from loaded inputs
+function populateFormFromInputs(inputs) {
+    // Populate variables
+    if (inputs.variables) {
+        Object.entries(inputs.variables).forEach(([key, value]) => {
+            const field = document.getElementById(`input-${key}`);
+            if (field) {
+                if (field.type === 'checkbox') {
+                    field.checked = value === true || value === 'true';
+                } else if (field.type === 'select-one') {
+                    field.value = value;
+                } else {
+                    field.value = typeof value === 'object' ? JSON.stringify(value) : value;
+                }
+            }
+        });
+    }
+
+    // Populate secrets
+    if (inputs.secrets) {
+        inputs.secrets.forEach(secretName => {
+            const checkbox = document.getElementById(`secret-${secretName}`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }
+
+    // Populate files
+    if (inputs.files) {
+        Object.entries(inputs.files).forEach(([key, value]) => {
+            const field = document.getElementById(`file-${key}`);
+            if (field) {
+                field.value = value;
+            }
+        });
+    }
+
+    // Handle basic form with parameters field
+    const paramsField = document.getElementById('basic-params');
+    if (paramsField && inputs.variables) {
+        paramsField.value = JSON.stringify(inputs.variables, null, 2);
+    }
+}
