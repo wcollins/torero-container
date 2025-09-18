@@ -1,5 +1,21 @@
 # This is a development-only pyproject.toml for running tests
-# The actual packages are in opt/torero-api, opt/torero-mcp, opt/torero-ui
+# The actual packages are in opt/torero-mcp, opt/torero-ui
+
+[project]
+name = "torero-container"
+version = "0.1.0"
+description = "Development environment for torero container projects"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -11,13 +27,14 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning:starlette.formparsers"
 ]
 addopts = [
-    "--cov=opt/torero-api/torero_api",
+    "--cov=opt/torero-mcp/torero_mcp",
+    "--cov=opt/torero-ui/torero_ui",
     "--cov-report=term-missing",
     "--cov-report=xml",
     "--cov-report=html",
     "-v"
 ]
-pythonpath = ["opt/torero-api"]
+pythonpath = ["opt/torero-mcp", "opt/torero-ui"]
 
 [tool.black]
 line-length = 88
@@ -34,7 +51,7 @@ use_parentheses = true
 ensure_newline_before_comments = true
 
 [tool.coverage.run]
-source = ["opt/torero-api/torero_api"]
+source = ["opt/torero-mcp/torero_mcp", "opt/torero-ui/torero_ui"]
 omit = [
     "*/tests/*",
     "*/test_*",
