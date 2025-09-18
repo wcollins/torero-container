@@ -4,7 +4,7 @@
 {% block content %}
 <!-- summary statistics -->
 <div class="section">
-    <div class="section-title">System Overview</div>
+    <div class="section-title">Overview</div>
     <div class="summary-stats" id="summary-stats">
         <div class="stat-card">
             <div class="stat-value" id="total-services">{{ stats.total_services }}</div>
@@ -33,7 +33,7 @@
 
 <!-- service status grid -->
 <div class="section">
-    <div class="section-title">Service Status</div>
+    <div class="section-title">Services</div>
     <div class="status-grid" id="service-status">
         {% for service in services %}
         <div class="status-card" data-service="{{ service.name }}">
@@ -59,35 +59,12 @@
                 <span class="status-label">Success Rate:</span>
                 <span class="status-success">{{ service.success_rate|floatformat:1 }}%</span>
             </div>
-            <div class="service-actions">
-                {% if service.service_type == "opentofu-plan" %}
-                <div class="execute-dropdown">
-                    <button class="execute-btn dropdown-toggle" onclick="toggleExecuteDropdown(this)">
-                        <span class="btn-text">Execute</span>
-                        <span class="btn-spinner" style="display: none;">
-                            <span class="spinner"></span> Executing...
-                        </span>
-                        <span class="dropdown-arrow">▼</span>
-                    </button>
-                    <div class="dropdown-menu">
-                        <button class="dropdown-item" onclick="executeOpenTofu('{{ service.name }}', 'apply', this)">
-                            Apply
-                        </button>
-                        <button class="dropdown-item destroy-option" onclick="executeOpenTofu('{{ service.name }}', 'destroy', this)">
-                            Destroy
-                        </button>
-                    </div>
-                </div>
-                {% else %}
-                <button class="execute-btn" onclick="executeService('{{ service.name }}', this)">
-                    <span class="btn-text">Execute</span>
+            <div class="execute-container">
+                <button class="execute-btn execute-icon-btn" onclick="showInputForm('{{ service.name }}', '{{ service.service_type }}')" title="Execute Service">
+                    <img src="{% static 'img/execute.svg' %}" alt="Execute" class="execute-icon">
                     <span class="btn-spinner" style="display: none;">
-                        <span class="spinner"></span> Executing...
+                        <span class="spinner"></span>
                     </span>
-                </button>
-                {% endif %}
-                <button class="history-btn" onclick="showServiceHistory('{{ service.name }}')">
-                    History
                 </button>
             </div>
         </div>

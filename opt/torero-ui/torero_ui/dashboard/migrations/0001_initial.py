@@ -70,6 +70,8 @@ class Migration(migrations.Migration):
                 ('estimated_duration', models.IntegerField(blank=True, null=True)),
                 ('execution_id', models.CharField(blank=True, max_length=255, null=True)),
                 ('operation', models.CharField(blank=True, max_length=50, null=True)),
+                ('inputs', models.JSONField(default=dict, blank=True, null=True)),
+                ('input_file', models.CharField(max_length=500, null=True, blank=True)),
             ],
             options={
                 'ordering': ['priority', 'created_at'],
