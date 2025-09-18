@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""
+Wrapper for torero CLI that adds support for --input-file parameter.
+Translates input file contents to appropriate --set and --set-secret flags.
+"""
+
+import sys
+import os
+import json
+import yaml
+import subprocess
+import argparse
+from pathlib import Path
+from typing import Dict, List, Any
+
+def resolve_path(path: str) -> Path:
+    """Resolve @ notation and relative paths."""
+
+    if path.startswith('@'):
+
+        # @ notation relative to /home/admin/data
+        return Path('/home/admin/data') / path[1:]
+    return Path(path).resolve()
+
+def parse_tfvars(content: str) -> Dict[str, Any]:
+    """Parse Terraform .tfvars format."""
+
+    variables = {}
+    lines = content.strip().split('\n')
+
+    current_key = None
+    current_value = []
+    in_multiline = False
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        if '=' in line and not in_multiline:
+            parts = line.split('=', 1)
+            key = parts[0].strip()
+            value = parts[1].strip()
+
+            # Handle multiline values (like objects/maps)
+            if value.startswith('{') and not value.endswith('}'):
+                current_key = key
+                current_value = [value]
+                in_multiline = True
+            else:
+
+                # Simple value
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]  # Remove quotes
+                variables[key] = value
+        elif in_multiline:
+            current_value.append(line)
+            if line.endswith('}'):
+
+                # End of multiline value
+                variables[current_key] = ' '.join(current_value)
+                current_key = None
+                current_value = []
+                in_multiline = False
+
+    return {'variables': variables}
+
+def load_input_file(file_path: Path) -> Dict[str, Any]:
+    """Load and parse input file based on extension."""
+
+    if not file_path.exists():
+        print(f"Error: Input file not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    suffix = file_path.suffix.lower()
+
+    try:
+        if suffix in ['.yaml', '.yml']:
+            with open(file_path, 'r') as f:
+                return yaml.safe_load(f) or {}
+        elif suffix == '.json':
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        elif suffix == '.tfvars':
+            with open(file_path, 'r') as f:
+                return parse_tfvars(f.read())
+        else:
+            print(f"Error: Unsupported input file format: {suffix}", file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error parsing input file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def flatten_value(value: Any) -> str:
+    """Convert complex values to string format for CLI."""
+
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(',', ':'))
+    elif isinstance(value, bool):
+        return 'true' if value else 'false'
+    elif value is None:
+        return ''
+    else:
+        return str(value)
+
+def inputs_to_cli_args(inputs: Dict[str, Any]) -> List[str]:
+    """Convert inputs dictionary to CLI arguments."""
+
+    args = []
+
+    # Handle variables
+    variables = inputs.get('variables', {})
+    for key, value in variables.items():
+        # torero uses --set for variables
+        flat_value = flatten_value(value)
+        args.extend(['--set', f'{key}={flat_value}'])
+
+    # Handle secrets
+    secrets = inputs.get('secrets', [])
+    for secret in secrets:
+        # torero uses --set-secret for secrets
+        args.extend(['--set-secret', secret])
+
+    # Handle state file
+    if 'files' in inputs and 'state_file' in inputs['files']:
+        state_path = resolve_path(inputs['files']['state_file'])
+        args.extend(['--state', f'@{state_path}'])
+
+    return args
+
+def main():
+    """Main wrapper function."""
+
+    # Parse arguments to find --input-file
+    args = sys.argv[1:]
+
+    # Look for --input-file in arguments
+    input_file_idx = None
+    for i, arg in enumerate(args):
+        if arg == '--input-file' and i + 1 < len(args):
+            input_file_idx = i
+            break
+
+    if input_file_idx is not None:
+        # Extract input file path
+        input_file_path = args[input_file_idx + 1]
+
+        # Remove --input-file and its value from args
+        del args[input_file_idx:input_file_idx + 2]
+
+        # Load and parse input file
+        resolved_path = resolve_path(input_file_path)
+        inputs = load_input_file(resolved_path)
+
+        # Convert to CLI arguments
+        cli_args = inputs_to_cli_args(inputs)
+
+        # Insert CLI arguments at the position where --input-file was
+        args[input_file_idx:input_file_idx] = cli_args
+
+    # Execute real torero with modified arguments
+    torero_cmd = ['torero'] + args
+
+    # Debug output if verbose
+    if '--verbose' in args or os.environ.get('TORERO_DEBUG'):
+        print(f"Executing: {' '.join(torero_cmd)}", file=sys.stderr)
+
+    # Run torero
+    result = subprocess.run(torero_cmd, capture_output=False)
+    sys.exit(result.returncode)
+
+if __name__ == '__main__':
+    main()
