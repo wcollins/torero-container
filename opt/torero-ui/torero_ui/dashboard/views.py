@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 
 from .models import ServiceExecution, ServiceInfo, ExecutionQueue
-from .services import DataCollectionService, ToreroCliClient, ExecutionQueueService
+from .services import DataCollectionService, ToreroCliClient, ExecutionQueueService, ServiceInputManager
 
 # logger with fallback for initialization issues
 def get_logger():
@@ -69,6 +69,7 @@ class DashboardView(TemplateView):
 @require_http_methods(["GET"])
 def api_dashboard_data(request):
     """api endpoint for dashboard data."""
+
     data_service = DataCollectionService()
     
     # get fresh statistics
@@ -205,22 +206,29 @@ def api_execute_service(request, service_name):
     try:
         # get service info
         service_info = ServiceInfo.objects.get(name=service_name)
-        
+
         # parse request body for additional parameters
         operation = None
+        inputs = None
+        input_file = None
+
         if request.body:
             try:
                 data = json.loads(request.body)
                 operation = data.get('operation')
+                inputs = data.get('inputs')
+                input_file = data.get('input_file')
             except json.JSONDecodeError:
                 pass
-        
-        # add to execution queue
+
+        # add to execution queue with inputs
         queue_service = ExecutionQueueService()
         queue_item = queue_service.add_to_queue(
             service_name=service_name,
             service_type=service_info.service_type,
-            operation=operation
+            operation=operation,
+            inputs=inputs,
+            input_file=input_file
         )
         
         return JsonResponse({
@@ -248,6 +256,7 @@ def api_execute_service(request, service_name):
 @require_http_methods(["GET"])
 def api_queue_status(request):
     """get current queue status."""
+
     queue_service = ExecutionQueueService()
     status = queue_service.get_queue_status()
     return JsonResponse(status)
@@ -256,10 +265,250 @@ def api_queue_status(request):
 @require_http_methods(["POST"])
 def api_cancel_execution(request, queue_id):
     """cancel a queued execution."""
+
     queue_service = ExecutionQueueService()
     success = queue_service.cancel_execution(int(queue_id))
-    
+
     if success:
         return JsonResponse({'status': 'success', 'message': 'execution cancelled'})
     else:
         return JsonResponse({'status': 'error', 'message': 'can only cancel queued executions'}, status=400)
+
+
+@require_http_methods(["GET", "POST"])
+def api_service_inputs(request, service_name):
+    """api endpoint for service input manifests."""
+
+    input_manager = ServiceInputManager()
+
+    if request.method == "GET":
+        # get input manifest for service
+        manifest = input_manager.discover_inputs(service_name)
+        if manifest:
+            return JsonResponse({
+                'status': 'success',
+                'manifest': manifest,
+                'schema': input_manager.get_input_schema(service_name)
+            })
+        else:
+            return JsonResponse({
+                'status': 'not_found',
+                'message': f'no input manifest found for service {service_name}'
+            }, status=404)
+
+    elif request.method == "POST":
+        # save or update input manifest
+        try:
+            manifest_data = json.loads(request.body)
+            success = input_manager.save_manifest(service_name, manifest_data)
+
+            if success:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'manifest saved for service {service_name}'
+                })
+            else:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'failed to save manifest'
+                }, status=500)
+
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'invalid JSON in request body'
+            }, status=400)
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+
+@require_http_methods(["POST"])
+def api_validate_inputs(request, service_name):
+    """validate inputs against service manifest."""
+
+    input_manager = ServiceInputManager()
+
+    try:
+        inputs = json.loads(request.body)
+        valid, errors = input_manager.validate_inputs(service_name, inputs)
+
+        return JsonResponse({
+            'valid': valid,
+            'errors': errors,
+            'service': service_name
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'invalid JSON in request body'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["POST"])
+def api_load_input_file(request):
+    """load an input file and return its contents."""
+
+    import yaml
+    from pathlib import Path
+
+    try:
+        data = json.loads(request.body)
+        file_path = data.get('file_path')
+        service_name = data.get('service_name')
+
+        if not file_path:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'file_path is required'
+            }, status=400)
+
+        # resolve path (handle @ notation)
+        if file_path.startswith('@'):
+            resolved_path = Path('/home/admin/data') / file_path[1:]
+        else:
+            resolved_path = Path(file_path)
+
+        if not resolved_path.exists():
+            return JsonResponse({
+                'status': 'error',
+                'message': f'file not found: {file_path}'
+            }, status=404)
+
+        # load and parse file based on extension
+        try:
+            suffix = resolved_path.suffix.lower()
+
+            if suffix in ['.yaml', '.yml']:
+                with open(resolved_path, 'r') as f:
+                    inputs = yaml.safe_load(f)
+
+            elif suffix == '.json':
+                with open(resolved_path, 'r') as f:
+                    inputs = json.load(f)
+
+            elif suffix == '.tfvars':
+
+                # parse terraform variables file
+                inputs = {'variables': {}}
+                with open(resolved_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip()
+
+                            # basic parsing - remove quotes
+                            if value.startswith('"') and value.endswith('"'):
+                                value = value[1:-1]
+
+                            # try to parse as JSON for complex types
+                            try:
+                                value = json.loads(value)
+                            except:
+                                pass
+                            inputs['variables'][key] = value
+
+            else:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'unsupported file format: {suffix}'
+                }, status=400)
+
+            # ensure proper structure
+            if not isinstance(inputs, dict):
+                inputs = {'variables': inputs}
+
+            return JsonResponse({
+                'status': 'success',
+                'inputs': inputs,
+                'file_path': str(resolved_path),
+                'service': service_name
+            })
+
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'failed to parse file: {str(e)}'
+            }, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'invalid JSON in request body'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_list_input_files(request, service_name):
+    """list available input files for a service."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        from pathlib import Path
+        import re
+
+        # base directory for input files
+        inputs_dir = Path('/home/admin/data/inputs')
+        available_files = []
+
+        if inputs_dir.exists():
+            # look for files that match the service name pattern
+            # e.g., for 'aws-vpc', find 'aws-vpc-dev.yaml', 'aws-vpc.tfvars', etc.
+            # Note: [.-]? makes the separator optional for files like 'aws-vpc.tfvars'
+            service_pattern = re.compile(f'^{re.escape(service_name)}([.-].*)?\\.(yaml|yml|json|tfvars)$', re.IGNORECASE)
+
+            for file_path in inputs_dir.iterdir():
+                if file_path.is_file() and service_pattern.match(file_path.name):
+                    available_files.append({
+                        'path': f"@inputs/{file_path.name}",
+                        'name': file_path.name,  # Just use the filename
+                        'filename': file_path.name,
+                        'format': file_path.suffix[1:],  # remove the dot
+                        'size': file_path.stat().st_size
+                    })
+
+            # also check for generic input files
+            generic_patterns = ['config.yaml', 'config.yml', 'defaults.yaml', 'defaults.yml']
+            for pattern in generic_patterns:
+                file_path = inputs_dir / pattern
+                if file_path.exists():
+                    available_files.append({
+                        'path': f"@inputs/{file_path.name}",
+                        'name': 'Default Configuration',
+                        'filename': file_path.name,
+                        'format': file_path.suffix[1:],
+                        'size': file_path.stat().st_size
+                    })
+
+        # sort by name
+        available_files.sort(key=lambda x: x['name'])
+
+        return JsonResponse({
+            'status': 'success',
+            'service': service_name,
+            'files': available_files
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
