@@ -86,6 +86,8 @@ class ExecutionQueue(models.Model):
     estimated_duration = models.IntegerField(null=True, blank=True)  # seconds
     execution_id = models.CharField(max_length=255, null=True, blank=True)
     operation = models.CharField(max_length=50, null=True, blank=True)  # for opentofu apply/destroy
+    inputs = models.JSONField(default=dict, blank=True, null=True)  # store input variables
+    input_file = models.CharField(max_length=500, null=True, blank=True)  # optional input file path
     
     class Meta:
         ordering = ['priority', 'created_at']
